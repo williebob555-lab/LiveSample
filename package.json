@@ -1,7 +1,7 @@
 {
   "name": "sampler-app",
   "productName": "LiveSample",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build professional multisampled instruments fast — capture, analyze, map, and export to SFZ, DecentSampler and Ableton.",
   "main": "electron/main.cjs",
   "type": "module",

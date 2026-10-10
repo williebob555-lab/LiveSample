@@ -443,15 +443,22 @@ MyPiano.sinst/
 ```
 src/
   core/      types.ts (the model) · automap · pipeline · project · native
-  dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft
+             history (undo) · recovery (autosave) · midi · articulations · capture
+  dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft · denoise
   export/    context (filenames) · sfz · decentsampler · index (targets, warnings)
-  audio/     store (decoded audio) · engine (audition) · output · host · render · protocol
-  ui/        primitives · zonemap · keyboard · waveform · studio · session · updates
+  audio/     store (decoded audio) · engine (audition) · output · host · render · protocol · midi
+  ui/        studio (layout, coordinator) · project-actions (open/save/import)
+             stages/ takes · map · refine · export — one module per stage
+             session · zonemap · keyboard · waveform · coverage · curves · notes
+             articulations · mixer · denoise · midi-settings · audio-settings
+             updates · brand · primitives · dom
   styles/    tokens.css · app.css
 electron/    main.cjs (incl. updater) · preload.cjs
 .github/     workflows/release.yml
 linux/       livesample.desktop.in
-scripts/     selftest.ts · test-host.cjs · build-host.mjs · install-linux.sh
+brand/       mark, wordmark, lockups, banners (SVG source) · png/ (generated)
+scripts/     selftest.ts · test-capture.cjs · test-host.cjs · make-brand.cjs
+             build-host.mjs · install-linux.sh
 ```
 
 The audition engine deliberately uses the same selection rules the exporters
