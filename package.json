@@ -2,7 +2,7 @@
   "name": "sampler-app",
   "productName": "Sampler",
   "version": "0.1.0",
-  "description": "Build professional multisampled instruments fast — capture, analyze, map, and export to SFZ, DecentSampler, Ableton and LivePatch.",
+  "description": "Build professional multisampled instruments fast — capture, analyze, map, and export to SFZ, DecentSampler and Ableton.",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
     "selftest": "esbuild scripts/selftest.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/selftest.mjs --log-level=error && node node_modules/.cache/selftest.mjs",
     "test:audio": "npm run build:host && electron scripts/test-host.cjs",
     "start": "npm run build && electron .",
-    "electron": "electron ."
+    "electron": "electron .",
+    "install:desktop": "bash scripts/install-linux.sh"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -23,5 +24,8 @@
   },
   "dependencies": {
     "audify": "^1.10.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

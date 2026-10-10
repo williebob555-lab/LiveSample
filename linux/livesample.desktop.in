@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=LiveSample
+GenericName=Sampler
+Comment=Capture, map and export multisampled instruments
+Exec=@EXEC@
+Path=@DIR@
+Icon=audio-x-generic
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=sampler;sfz;decentsampler;instrument;recording;
+StartupWMClass=sampler-app

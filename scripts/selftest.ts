@@ -321,7 +321,7 @@ group('Export');
   const sfz = exportSfz(ctx);
 
   check('sfz declares a control block', sfz.includes('<control>'));
-  check('sfz sets default_path', sfz.includes('default_path=samples\\'));
+  check('sfz sets default_path', sfz.includes('default_path=samples/'));
   check('sfz has a region per zone', (sfz.match(/<region>/g) ?? []).length === g.zones.length,
     `${(sfz.match(/<region>/g) ?? []).length} vs ${g.zones.length}`);
   check('sfz writes key centers', sfz.includes('pitch_keycenter=60'));

@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('samplerNative', {
 // The audio host bridge. `send` is fire-and-forget; everything the host has to
 // say comes back through the single `onEvent` stream.
 contextBridge.exposeInMainWorld('samplerAudio', {
+  platform: process.platform,
   start: () => ipcRenderer.invoke('audio:start'),
   stop: () => ipcRenderer.invoke('audio:stop'),
   send: (msg) => ipcRenderer.send('audio:send', msg),
