@@ -1,9 +1,12 @@
+![LiveSample](brand/png/banner-readme-1280x280.png)
+
 # LiveSample
 
 Build professional multisampled instruments quickly — capture, analyse, map,
 and export to SFZ, DecentSampler and Ableton.
 
-Every visual value lives in `src/styles/tokens.css`, so re-theming is one file.
+Every visual value lives in `src/styles/tokens.css`; the brand (mark, colours,
+type, and how it relates to LivePatch) is in [`brand/`](brand/README.md).
 
 ## Install
 
@@ -86,6 +89,7 @@ After the first build, `npm run electron` opens the app without rebuilding.
 | `npm run test:audio` | Boots the real audio host and plays a note through actual hardware. |
 | `npm run dist` | Build the installer for this OS into `release/` (NSIS on Windows, AppImage on Linux). |
 | `npm run release` | Same, and publish to GitHub Releases (CI does this on a tag). |
+| `npm run brand` | Re-render `brand/png/` and the app icons from the brand SVGs. |
 | `npm run install:desktop` | Linux, source checkout only: add a launcher entry (`-- --remove` to undo). The AppImage doesn't need it. |
 
 `selftest` exercises the parts a screenshot cannot check — pitch detection
@@ -423,9 +427,8 @@ makes the self-test possible and keeps the door open to reusing them elsewhere.
 - The UI is a **design system, not a theme system** — one look, fixed, with
   nothing exposed to the user. Making all ~45 visual parameters adjustable in an
   earlier project meant nothing had a designed default.
-- Bundling Inter finishes the typography. The fallback on Windows is Segoe UI,
-  which reads as a Windows utility rather than a music product; on Linux it is
-  whatever the desktop's sans is (Noto Sans on Fedora KDE).
+- Inter is bundled, so the typography is the same on every OS rather than
+  Segoe UI on Windows and Noto Sans on Fedora.
 - Numbers use tabular figures everywhere. Values that jitter horizontally as
   they change are the loudest amateur tell in audio software.
 

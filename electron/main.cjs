@@ -68,6 +68,9 @@ function createWindow() {
     minWidth: 1040,
     minHeight: 680,
     backgroundColor: '#0e0f11',
+    // Windows takes its icon from the .exe; Linux needs it on the window, or
+    // Plasma shows a generic one for an unpackaged run.
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

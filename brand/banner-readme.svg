@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 280" width="1280" height="280" role="img" aria-label="LiveSample">
+  <title>LiveSample — README banner</title>
+  <rect width="1280" height="280" fill="#0e0f11"/>
+  <path d="M1010 140.0 L1013 125.9 L1016 100.3 L1019 80.5 L1022 74.4 L1025 83.1 L1028 103.7 L1031 130.7 L1034 158.2 L1037 180.7 L1040 194.6 L1043 197.7 L1046 190.5 L1049 174.9 L1052 154.4 L1055 132.8 L1058 114.2 L1061 101.6 L1064 96.6 L1067 99.7 L1070 109.5 L1073 124.0 L1076 140.1 L1079 155.0 L1082 166.1 L1085 171.8 L1088 171.5 L1091 165.6 L1094 155.8 L1097 143.9 L1100 132.2 L1103 122.8 L1106 117.2 L1109 116.0 L1112 119.0 L1115 125.6 L1118 134.1 L1121 143.0 L1124 150.8 L1127 156.0 L1130 158.0 L1133 156.7 L1136 152.6 L1139 146.6 L1142 139.9 L1145 133.7 L1148 129.1 L1151 126.8 L1154 127.0 L1157 129.4 L1160 133.5 L1163 138.4 L1166 143.3 L1169 147.1 L1172 149.5 L1175 150.0 L1178 148.7 L1181 146.0 L1184 142.4 L1187 138.7 L1190 135.5 L1193 133.4 L1196 132.5 L1199 133.1 L1202 134.8 L1205 137.3 L1208 140.1 L1211 142.6 L1214 144.5 L1217 145.5 L1220 145.4 L1223 144.4 L1226 142.7 L1229 140.6 L1232 138.6 L1235 137.0 L1238 136.1 L1241 135.9 L1244 136.4 L1247 137.5 L1250 139.0" fill="none" stroke="#5fb2ff" stroke-width="3" opacity="0.3"/>
+  <g transform="translate(64 60) scale(0.625)"><rect width="256" height="256" rx="56" fill="#1b1f26"/>  <path d="M120 188 H160 C186 188 202 176 202 156 C202 136 186 129 164 125 C142 121 128 112 128 94 C128 78 142 70 162 70 H196" fill="none" stroke="#5fb2ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 70 V188 H120" fill="none" stroke="#e8a13d" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <text x="262.0" y="176" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0" fill="#e8ecf2">L</text>
+  <rect x="338.0" y="106.0" width="22.0" height="70.0" rx="11.0" fill="#333c49"/>
+  <rect x="338.0" y="134.0" width="22.0" height="42.0" rx="11.0" fill="#e8a13d"/>
+  <circle cx="349.0" cy="84.0" r="13.0" fill="#e8a13d"/>
+  <text x="368.0" y="176" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0"><tspan fill="#e8ecf2">ve</tspan><tspan fill="#5fb2ff">Sample</tspan></text>
+  <text x="266" y="226" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="500" fill="#94a3b8">Capture, map and export multisampled instruments</text>
+</svg>

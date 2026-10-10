@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="LiveSample">
+  <title>LiveSample mark — circle</title>
+  <!-- For avatars and anything masked to a circle. -->
+  <circle cx="128" cy="128" r="128" fill="#14161a"/>
+  <g transform="translate(18 18) scale(0.86)">  <path d="M120 188 H160 C186 188 202 176 202 156 C202 136 186 129 164 125 C142 121 128 112 128 94 C128 78 142 70 162 70 H196" fill="none" stroke="#5fb2ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 70 V188 H120" fill="none" stroke="#e8a13d" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="LiveSample">
+  <title>LiveSample mark — square</title>
+  <!-- One stroke: the L, in tape amber (recording), runs straight into an S drawn
+       as one waveform cycle on its side, in audio blue. A live take becoming a
+       sample. Sibling of LivePatch's cable-into-socket LP — same tile, same L. -->
+  <rect width="256" height="256" rx="56" fill="#14161a"/>
+  <path d="M120 188 H160 C186 188 202 176 202 156 C202 136 186 129 164 125 C142 121 128 112 128 94 C128 78 142 70 162 70 H196" fill="none" stroke="#5fb2ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 70 V188 H120" fill="none" stroke="#e8a13d" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

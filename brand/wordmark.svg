@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 200" width="660" height="200" role="img" aria-label="LiveSample">
+  <title>LiveSample wordmark — dark backgrounds</title>
+  <!-- The i is a recording-level meter with a record light for its dot — the one
+       substitution, sibling to LivePatch's fader i. Typeset in Inter, not drawn:
+       use the PNGs where exact shape matters. -->
+  <text x="24.0" y="146" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0" fill="#e8ecf2">L</text>
+  <rect x="100.0" y="76.0" width="22.0" height="70.0" rx="11.0" fill="#333c49"/>
+  <rect x="100.0" y="104.0" width="22.0" height="42.0" rx="11.0" fill="#e8a13d"/>
+  <circle cx="111.0" cy="54.0" r="13.0" fill="#e8a13d"/>
+  <text x="130.0" y="146" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0"><tspan fill="#e8ecf2">ve</tspan><tspan fill="#5fb2ff">Sample</tspan></text>
+</svg>

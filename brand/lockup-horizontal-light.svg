@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 220" width="900" height="220" role="img" aria-label="LiveSample">
+  <title>LiveSample lockup — horizontal, light backgrounds</title>
+  <!-- Primary lockup for light backgrounds. -->
+  <g transform="translate(30 30) scale(0.625)">
+  <rect width="256" height="256" rx="56" fill="#14161a"/>
+  <path d="M120 188 H160 C186 188 202 176 202 156 C202 136 186 129 164 125 C142 121 128 112 128 94 C128 78 142 70 162 70 H196" fill="none" stroke="#5fb2ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 70 V188 H120" fill="none" stroke="#e8a13d" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="228.0" y="148" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0" fill="#14161a">L</text>
+  <rect x="304.0" y="78.0" width="22.0" height="70.0" rx="11.0" fill="#d5dae2"/>
+  <rect x="304.0" y="106.0" width="22.0" height="42.0" rx="11.0" fill="#b8721c"/>
+  <circle cx="315.0" cy="56.0" r="13.0" fill="#b8721c"/>
+  <text x="334.0" y="148" font-family="Inter, Segoe UI Variable Display, Segoe UI, -apple-system, system-ui, Helvetica Neue, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4.0"><tspan fill="#14161a">ve</tspan><tspan fill="#1f6fd0">Sample</tspan></text>
+</svg>
