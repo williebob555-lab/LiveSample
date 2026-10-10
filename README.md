@@ -207,6 +207,45 @@ Installed ASIO drivers that do not respond are listed separately as "installed,
 not responding" — read from `HKLM\SOFTWARE\ASIO` — so an unplugged interface is
 distinguishable from one that was never installed.
 
+## Your work is safe
+
+- **Undo / redo** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y, and the top-bar buttons)
+  covers every edit, including audio processing: each step keeps the
+  instrument plus references to the sample buffers, so undoing a Clean up,
+  Denoise or retake brings the previous sound back, not just its settings.
+  Processing never edits a buffer in place, which is what makes holding
+  references safe and free. Rapid edits within 500 ms (a drag, typing) are one
+  step; history holds 100 steps and resets on open.
+- **Autosave.** Every minute while there are unsaved changes, a recovery copy
+  goes to `<userData>/recovery/`. If LiveSample didn't close cleanly, the next
+  launch offers to restore it. A clean save, quit or "Don't save" clears it.
+- **Open Recent** in the top bar and on the welcome screen.
+
+## MIDI
+
+**MIDI…** in the bottom bar picks the input (all, or one port) and channel.
+Any MIDI keyboard plays the instrument through the same audition path as the
+on-screen keys, sustain pedal included.
+
+**Unattended capture.** In the capture dialog, *Play each note over MIDI*
+turns a session into a hands-off run for hardware synths: for each step the app
+sends the note to the chosen MIDI output, records it, sends note-off after the
+note length, waits for the release tail, and moves on. A step whose note never
+arrives (muted or mis-routed synth) is skipped and counted rather than hanging
+the run. All Notes Off is sent on stop.
+
+## Articulations, mics and denoise
+
+- **Articulations** (Map stage) — add, rename, reorder and delete; select by
+  keyswitch, CC range, velocity range or always. Audition any one. SFZ sets
+  `sw_default` so the default articulation plays before a keyswitch is pressed.
+- **Mics** (Map stage) — a level and mute per mic position. Zones from every
+  mic of the same note play together, mixed by those levels, in both engines
+  and in SFZ / DecentSampler export.
+- **Denoise** (Takes stage) — spectral gating with the noise profile learned
+  from the quietest part of the take. Length and timing are preserved exactly,
+  so zones and loops stay valid.
+
 ## The idea
 
 The hard part of sampling is not DSP, it is labour and interruption. Recording
@@ -434,16 +473,17 @@ makes the self-test possible and keeps the door open to reusing them elsewhere.
 
 ## Status
 
-Working: import (files, folders, long-take splitting), analysis, cleanup and
-level matching, auto-mapping, loop finding, gap filling by repitch, the audition
-engine, zone editing, capture sessions with reference pitches, audio device
-selection across WASAPI / ASIO / DirectSound on Windows and PulseAudio
+Working: import (files, folders, long-take splitting), analysis, cleanup,
+denoising and level matching, auto-mapping, loop finding, gap filling by
+repitch, the audition engine, zone editing, articulation editing, mic mixing,
+capture sessions with reference pitches, MIDI input and MIDI-driven unattended
+capture, undo/redo, autosave recovery, in-app updates, audio device selection across WASAPI / ASIO / DirectSound on Windows and PulseAudio
 (PipeWire) / ALSA on Linux, and SFZ / DecentSampler / WAV
 export.
 
-Not yet: MIDI input and unattended MIDI-driven capture, mic-position blending,
-articulation editing UI, native Ableton `.adg`, DecentSampler UI designer,
-denoising.
+Not yet: native Ableton `.adg` (needs one saved Sampler preset to match the
+schema against), DecentSampler UI designer, pitch bend in the audition engines,
+and mic delay in the native renderer (the web engine and SFZ honour it).
 
 Untested against real hardware: the Linux native path on a live PipeWire
 session (enumeration and the fallback reporting are verified; no stream has
