@@ -20,6 +20,16 @@ contextBridge.exposeInMainWorld('samplerNative', {
   userData: () => ipcRenderer.invoke('app:userData'),
   documents: () => ipcRenderer.invoke('app:documents'),
 
+  version: () => ipcRenderer.invoke('app:version'),
+  updatesCheck: () => ipcRenderer.invoke('updates:check'),
+  updatesDownload: () => ipcRenderer.invoke('updates:download'),
+  updatesInstall: () => ipcRenderer.invoke('updates:install'),
+  onUpdateProgress: (fn) => {
+    const listener = (_e, p) => fn(p);
+    ipcRenderer.on('updates:progress', listener);
+    return () => ipcRenderer.removeListener('updates:progress', listener);
+  },
+
   setDirty: (dirty) => ipcRenderer.send('app:setDirty', !!dirty),
   closeReady: () => ipcRenderer.send('app:closeReady'),
   onCloseRequest: (fn) => {

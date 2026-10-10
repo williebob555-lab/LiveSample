@@ -1,0 +1,37 @@
+# Builds the installers and publishes them as a GitHub Release, which is the
+# feed the app's in-app updater reads.
+#
+# To release: bump the version and push the tag —
+#   npm version patch        (or minor / major)
+#   git push --follow-tags
+#
+# Each platform builds on its own runner (NSIS needs Windows; the AppImage is
+# built on Linux) and uploads into the same release for the tag.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run selftest
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

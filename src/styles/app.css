@@ -985,3 +985,19 @@ select {
 .panel-sub {
   flex: 0 1 auto;
 }
+
+/* Updates ---------------------------------------------------------------- */
+
+.update-notes {
+  margin-top: var(--sp-2);
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: var(--sp-2);
+}
+button.update-available {
+  border-color: var(--accent);
+  color: var(--accent);
+}

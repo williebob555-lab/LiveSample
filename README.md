@@ -1,12 +1,48 @@
-# Sampler
+# LiveSample
 
 Build professional multisampled instruments quickly — capture, analyse, map,
 and export to SFZ, DecentSampler and Ableton.
 
-The working name is deliberately plain; the brand is not decided yet. Every
-visual value lives in `src/styles/tokens.css`, so re-theming is one file.
+Every visual value lives in `src/styles/tokens.css`, so re-theming is one file.
 
-## Quick start
+## Install
+
+Download the latest build from the
+[Releases page](https://github.com/williebob555-lab/LiveSample/releases/latest):
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| Windows | `LiveSample-<version>-setup.exe` | Per-user install, no admin prompt. |
+| Linux (Fedora KDE etc.) | `LiveSample-<version>-x86_64.AppImage` | `chmod +x` it and run it. If it won't start, `sudo dnf install fuse-libs`. |
+
+**Updates are built in.** The installed app checks quietly a few seconds after
+launch; when something newer exists the **Updates** button in the top bar turns
+into **Update to x.y.z**. Clicking it shows the release notes, downloads with
+progress, and offers to restart into the new version (or installs the next time
+you quit). It won't restart while the instrument has unsaved changes. Running
+from source, the button explains that `git pull` is the update path.
+
+## Releases
+
+Pushing a version tag builds both installers in GitHub Actions
+(`.github/workflows/release.yml`) and publishes them as a release, which is
+the feed every installed copy updates from:
+
+```bash
+npm version patch      # or minor / major — bumps package.json and tags
+git push --follow-tags
+```
+
+The app downloads updates anonymously, so **the releases must be publicly
+readable**. A private repository's releases are not: the update check gets a
+404 and the app reports "No release feed found". Either make this repository
+public, or point `publish` in `electron-builder.yml` at a separate public
+repository and give the workflow a token that can write to it.
+
+To build locally without publishing: `npm run dist` (installer for the current
+OS, in `release/`) or `npm run dist:dir` (unpacked, quicker to test).
+
+## Run from source
 
 Requirements: **Node 20+** (22 LTS recommended) and git. Electron is installed
 by npm; nothing else is needed on Windows. On Linux see
@@ -48,7 +84,9 @@ After the first build, `npm run electron` opens the app without rebuilding.
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run selftest` | The DSP, model and exporter checks (below). No audio hardware needed. |
 | `npm run test:audio` | Boots the real audio host and plays a note through actual hardware. |
-| `npm run install:desktop` | Linux only: add a launcher entry (`-- --remove` to undo). |
+| `npm run dist` | Build the installer for this OS into `release/` (NSIS on Windows, AppImage on Linux). |
+| `npm run release` | Same, and publish to GitHub Releases (CI does this on a tag). |
+| `npm run install:desktop` | Linux, source checkout only: add a launcher entry (`-- --remove` to undo). The AppImage doesn't need it. |
 
 `selftest` exercises the parts a screenshot cannot check — pitch detection
 accuracy across the range, the WAV `smpl` chunk round trip, loop finding,
@@ -65,6 +103,9 @@ came out. On Windows it additionally tries ASIO duplex.
 
 Tested target: **Fedora KDE Plasma** (Wayland session, PipeWire). Other
 current distributions running PipeWire or PulseAudio behave the same.
+
+The simplest route is the AppImage from [Install](#install), which updates
+itself. To run from source instead:
 
 ```bash
 sudo dnf install nodejs npm git alsa-lib pulseaudio-libs
@@ -104,6 +145,8 @@ after `git pull && npm run build` the launcher runs the new version.
   `systemctl --user status pipewire-pulse`.
 - *`test:audio` fails with "Connection refused"* — same cause; it needs a
   running desktop session, not an SSH shell or container.
+- *The AppImage does nothing when launched* — it needs FUSE 2:
+  `sudo dnf install fuse-libs`, or run it with `--appimage-extract-and-run`.
 - *Electron exits with a sandbox error* (only with unusual kernel settings):
   run `npx electron --no-sandbox .`.
 
@@ -359,9 +402,10 @@ src/
   dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft
   export/    context (filenames) · sfz · decentsampler · index (targets, warnings)
   audio/     store (decoded audio) · engine (audition) · output · host · render · protocol
-  ui/        primitives · zonemap · keyboard · waveform · studio · session
+  ui/        primitives · zonemap · keyboard · waveform · studio · session · updates
   styles/    tokens.css · app.css
-electron/    main.cjs · preload.cjs
+electron/    main.cjs (incl. updater) · preload.cjs
+.github/     workflows/release.yml
 linux/       livesample.desktop.in
 scripts/     selftest.ts · test-host.cjs · build-host.mjs · install-linux.sh
 ```
