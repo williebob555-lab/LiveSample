@@ -25,6 +25,11 @@ export interface LoadedAudio {
 
 const PEAK_BUCKETS = 2048;
 
+export interface AudioSnapshot {
+  raw: Map<string, LoadedAudio>;
+  processed: Map<string, LoadedAudio>;
+}
+
 class SampleStore {
   private raw = new Map<string, LoadedAudio>();
   private processed = new Map<string, LoadedAudio>();
@@ -98,6 +103,27 @@ class SampleStore {
   delete(id: string): void {
     this.raw.delete(id);
     this.processed.delete(id);
+  }
+
+  /**
+   * The current buffers, by reference. Processing never edits a buffer in place
+   * — it always stores a new one — so holding references is enough for undo to
+   * bring old audio back, and costs nothing per step.
+   */
+  snapshot(): AudioSnapshot {
+    return { raw: new Map(this.raw), processed: new Map(this.processed) };
+  }
+
+  /** Put a snapshot back. Returns the ids whose audio actually changed. */
+  restore(snap: AudioSnapshot): string[] {
+    const changed = new Set<string>();
+    for (const id of new Set([...this.raw.keys(), ...snap.raw.keys()]))
+      if (this.raw.get(id) !== snap.raw.get(id)) changed.add(id);
+    for (const id of new Set([...this.processed.keys(), ...snap.processed.keys()]))
+      if (this.processed.get(id) !== snap.processed.get(id)) changed.add(id);
+    this.raw = new Map(snap.raw);
+    this.processed = new Map(snap.processed);
+    return [...changed];
   }
 
   clear(): void {

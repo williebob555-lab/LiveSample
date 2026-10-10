@@ -9,6 +9,13 @@
 import { type Instrument, type Sample, createInstrument } from '../core/types';
 import { el, clear } from './dom';
 import { History } from '../core/history';
+import { sampleStore, type AudioSnapshot } from '../audio/store';
+import { audio } from '../audio/output';
+
+interface UndoState {
+  inst: Instrument;
+  audio: AudioSnapshot;
+}
 
 export type Stage = 'takes' | 'map' | 'refine' | 'export';
 
@@ -66,9 +73,9 @@ class AppState {
     if (dirty) {
       this.dirty = true;
       // Every user-level edit ends in touch(), so this is the single place the
-      // history hears about them. Sample audio lives in sampleStore, not here,
-      // so the snapshot is metadata only and cheap.
-      this.history.commit(this.instrument);
+      // history hears about them. Audio is recorded by reference alongside the
+      // instrument (see snapshotState), so cleanup and denoise undo too.
+      this.history.commit(this.liveState());
       this.rev++;
     }
     for (const fn of this.listeners) fn();
@@ -77,12 +84,25 @@ class AppState {
   /** Dirty + undo step without a redraw, for edits typed into live fields. */
   noteEdit(): void {
     this.dirty = true;
-    this.history.commit(this.instrument);
+    this.history.commit(this.liveState());
     this.rev++;
   }
 
-  /** structuredClone: the instrument is plain data by design. */
-  readonly history = new History<Instrument>(this.instrument, (i) => structuredClone(i), 100, 500);
+  /**
+   * One undo step: the instrument (plain data, so structuredClone) plus the
+   * sample store's buffers by reference. Without the audio, undoing a Clean up
+   * or Denoise would restore its settings and keep the processed sound.
+   */
+  private liveState(): UndoState {
+    return { inst: this.instrument, audio: sampleStore.snapshot() };
+  }
+
+  readonly history = new History<UndoState>(
+    { inst: this.instrument, audio: sampleStore.snapshot() },
+    (s) => ({ inst: structuredClone(s.inst), audio: s.audio }),
+    100,
+    500,
+  );
 
   get canUndo(): boolean {
     return this.history.canUndo;
@@ -107,8 +127,12 @@ class AppState {
    * spurious "unsaved" is safer than a missed one. Selections are pruned to
    * ids that still exist so the inspector never points at a ghost.
    */
-  private restore(inst: Instrument): void {
+  private restore(state: UndoState): void {
+    const inst = state.inst;
     this.instrument = inst;
+    // Engines cache decoded audio per sample; anything whose buffer changed
+    // must be re-sent or the audition keeps playing the undone sound.
+    for (const id of sampleStore.restore(state.audio)) audio.invalidate(id);
     const zoneIds = new Set(inst.groups.flatMap((g) => g.zones.map((z) => z.id)));
     this.selectedZones = this.selectedZones.filter((id) => zoneIds.has(id));
     this.selectedSamples = this.selectedSamples.filter((id) => inst.samples.some((s) => s.id === id));
@@ -130,7 +154,7 @@ class AppState {
     this.selectedZones = [];
     this.activeGroupId = inst.groups[0]?.id ?? null;
     this.dirty = false;
-    this.history.reset(inst);
+    this.history.reset({ inst, audio: sampleStore.snapshot() });
     this.touch(false);
   }
 

@@ -10,6 +10,7 @@ import { el } from './ui/dom';
 import { Studio } from './ui/studio';
 import { SessionScreen, type MidiDrive } from './ui/session';
 import { audio } from './audio/output';
+import { sampleStore } from './audio/store';
 import { openAudioSettings } from './ui/audio-settings';
 import { midi } from './audio/midi';
 import type { Stage } from './ui/app';
@@ -246,7 +247,7 @@ studio.refresh();
 
 // Dev-only handle for poking at state from the console.
 if (import.meta.env.DEV) {
-  (window as unknown as Record<string, unknown>).sampler = { app, studio, audio };
+  (window as unknown as Record<string, unknown>).sampler = { app, studio, audio, sampleStore };
 }
 
 // Closing the window.

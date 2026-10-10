@@ -264,6 +264,8 @@ class AudioOutput {
   private pushInstrument(inst: Instrument | null): void {
     if (!bridge) return;
     bridge.send({ type: 'instrument', instrument: inst });
+    // A freshly started host knows nothing of the UI's chosen articulation.
+    bridge.send({ type: 'articulation', id: this.articulationId });
     if (inst) this.syncSamples(inst);
   }
 
@@ -327,6 +329,23 @@ class AudioOutput {
   noteOff(key: number): void {
     if (this.backend === 'native') bridge?.send({ type: 'noteOff', key });
     else webEngine.noteOff(key);
+  }
+
+  /**
+   * The articulation used for audition, chosen from the UI rather than by
+   * playing a keyswitch. Held here so it survives backend switches and is
+   * re-sent to a freshly started native host.
+   */
+  private articulationId: string | null = null;
+
+  get auditionArticulation(): string | null {
+    return this.articulationId;
+  }
+
+  setArticulation(id: string | null): void {
+    this.articulationId = id;
+    webEngine.setArticulation(id);
+    if (this.backend === 'native') bridge?.send({ type: 'articulation', id });
   }
 
   setSustainPedal(down: boolean): void {

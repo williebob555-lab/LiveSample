@@ -21,6 +21,8 @@ import {
   normalizeVelocity,
   playbackRate,
   voiceGain,
+  micGain,
+  micOf,
 } from './select';
 
 interface Voice {
@@ -67,6 +69,15 @@ export class AuditionEngine {
 
   get running(): boolean {
     return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  /** Pick the articulation that notes sound until a keyswitch changes it. */
+  setArticulation(id: string | null): void {
+    this.activeArticulation = id;
+  }
+
+  get currentArticulation(): string | null {
+    return this.activeArticulation;
   }
 
   setInstrument(inst: Instrument | null): void {
@@ -220,6 +231,11 @@ export class AuditionEngine {
       }
     }
 
+    // Applied before the envelope is scheduled so the delayed voice still gets
+    // its own attack. A distant mic hears the source later; delaying it lines
+    // the mics up in time the way physical distance would.
+    t += Math.max(0, micOf(inst, zone)?.delayMs ?? 0) / 1000;
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
 
@@ -233,7 +249,7 @@ export class AuditionEngine {
 
     const amp = ctx.createGain();
     const pan = ctx.createStereoPanner();
-    pan.pan.value = Math.max(-1, Math.min(1, zone.pan + group.pan));
+    pan.pan.value = Math.max(-1, Math.min(1, zone.pan + group.pan + (micOf(inst, zone)?.pan ?? 0)));
 
     let node: AudioNode = amp;
     let filter: BiquadFilterNode | null = null;
@@ -252,7 +268,7 @@ export class AuditionEngine {
     node.connect(pan);
     pan.connect(this.master);
 
-    const peak = voiceGain(zone, group, vNorm);
+    const peak = voiceGain(zone, group, vNorm) * micGain(inst, zone);
 
     const e = group.ampEnv;
     const attack = Math.max(0.0005, e.attack);

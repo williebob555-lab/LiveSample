@@ -7,7 +7,7 @@
 // audition at all.
 // ============================================================================
 
-import type { Instrument, Group, Zone, Articulation } from '../core/types';
+import type { Instrument, Group, Zone, Articulation, MicBus } from '../core/types';
 
 export interface Selection {
   zone: Zone;
@@ -48,6 +48,21 @@ export class RoundRobinState {
     this.last.set(key, idx);
     return sorted[idx];
   }
+}
+
+/** The mic bus a zone feeds, or null for the default (unrouted) bus. */
+export function micOf(inst: Instrument, zone: Zone): MicBus | null {
+  return zone.micId ? (inst.mics.find((m) => m.id === zone.micId) ?? null) : null;
+}
+
+/**
+ * Linear mic-bus gain for a zone. Mute is folded in here (and also filtered in
+ * selectZones) so an engine that forgets one still cannot sound a muted mic.
+ */
+export function micGain(inst: Instrument, zone: Zone): number {
+  const mic = micOf(inst, zone);
+  if (!mic) return 1;
+  return mic.muted ? 0 : Math.pow(10, mic.gainDb / 20);
 }
 
 /** The articulation a keyswitch selected, or the default. */
@@ -106,8 +121,15 @@ export function selectZones(
     if (group.trigger !== trigger) continue;
     if (!groupEligible(inst, group, artic, velocity)) continue;
 
+    // Muted mics are dropped before round-robin picking, so a muted mic neither
+    // sounds nor advances its cycle.
     const matching = group.zones.filter(
-      (z) => key >= z.keyLow && key <= z.keyHigh && velocity >= z.velLow && velocity <= z.velHigh,
+      (z) =>
+        key >= z.keyLow &&
+        key <= z.keyHigh &&
+        velocity >= z.velLow &&
+        velocity <= z.velHigh &&
+        !micOf(inst, z)?.muted,
     );
     if (!matching.length) continue;
 

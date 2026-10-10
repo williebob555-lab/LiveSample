@@ -1,4 +1,4 @@
-import type { Instrument } from '../core/types';
+import type { Instrument, Group, Zone, MicBus } from '../core/types';
 
 /**
  * What every exporter is handed: the instrument, plus a resolver from sample id
@@ -73,4 +73,26 @@ export function makeContext(instrument: Instrument): ExportContext {
     instrument,
     fileFor: (id) => map.get(id) ?? `${id}.wav`,
   };
+}
+
+/**
+ * Split a group's zones by mic, so exporters can emit one group per mic with
+ * that mic's level on it. Muted mics are omitted entirely — a muted mic in the
+ * app must not come back to life in the player. Zones with no mic (or a mic id
+ * that no longer exists) form one unity-gain partition.
+ */
+export function micPartitions(
+  inst: Instrument,
+  group: Group,
+): { mic: MicBus | null; zones: Zone[] }[] {
+  const parts = new Map<string, { mic: MicBus | null; zones: Zone[] }>();
+  for (const z of group.zones) {
+    const mic = (z.micId && inst.mics.find((m) => m.id === z.micId)) || null;
+    if (mic?.muted) continue;
+    const key = mic?.id ?? '';
+    const part = parts.get(key) ?? { mic, zones: [] };
+    part.zones.push(z);
+    parts.set(key, part);
+  }
+  return [...parts.values()];
 }
