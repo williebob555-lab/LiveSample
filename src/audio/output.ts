@@ -4,11 +4,12 @@
 // Two backends behind one surface:
 //
 //   webaudio  Chromium's own mixer. No native dependency, device selection via
-//             enumerateDevices / setSinkId, shared-mode WASAPI only. The
+//             enumerateDevices / setSinkId, shared mode only. The
 //             fallback, and what runs in a plain browser.
 //
 //   native    RtAudio in the host process: WASAPI (including low-latency),
-//             DirectSound, and ASIO. The real answer for a sampling rig.
+//             DirectSound and ASIO on Windows; PulseAudio (PipeWire) and
+//             ALSA on Linux. The real answer for a sampling rig.
 //
 // Both drive the same selection logic (audio/select), so switching backends
 // changes latency and driver, never which sample you hear.
@@ -20,6 +21,7 @@ import { sampleStore } from './store';
 import { encodeWav } from '../dsp/wav';
 import {
   defaultStreamConfig,
+  platformApis,
   type ApiDevices,
   type HostEvent,
   type HostRequest,
@@ -28,6 +30,7 @@ import {
 } from './protocol';
 
 interface AudioBridge {
+  platform?: string;
   start(): Promise<boolean>;
   stop(): Promise<boolean>;
   send(msg: HostRequest): void;
@@ -38,6 +41,12 @@ const bridge: AudioBridge | undefined = (window as unknown as { samplerAudio?: A
   .samplerAudio;
 
 export const hasNativeAudio = !!bridge;
+
+/** The OS the audio host runs on. Under Electron the preload reports it; in a
+ *  plain browser it is only a guess, and only used for wording. */
+export const platform: string =
+  bridge?.platform ??
+  (/Win/i.test(navigator.userAgent) ? 'win32' : /Mac/i.test(navigator.userAgent) ? 'darwin' : 'linux');
 
 export type Backend = 'webaudio' | 'native';
 
@@ -51,7 +60,7 @@ export interface CaptureChunk {
 
 class AudioOutput {
   backend: Backend = 'webaudio';
-  config: StreamConfig = defaultStreamConfig();
+  config: StreamConfig = defaultStreamConfig(platform);
   apis: ApiDevices[] = [];
   status: StreamStatus | null = null;
   lastError: string | null = null;
@@ -69,6 +78,11 @@ class AudioOutput {
     try {
       const saved = localStorage.getItem(CONFIG_KEY);
       if (saved) this.config = { ...this.config, ...(JSON.parse(saved) as StreamConfig) };
+      // A config carried over from another OS (a synced profile, a copied
+      // userData folder) names an API this platform cannot open.
+      if (!platformApis(platform).includes(this.config.api)) {
+        this.config = { ...this.config, api: defaultStreamConfig(platform).api, outputDeviceId: null, inputDeviceId: null };
+      }
       const b = localStorage.getItem(BACKEND_KEY);
       if (b === 'native' && hasNativeAudio) this.backend = 'native';
     } catch {

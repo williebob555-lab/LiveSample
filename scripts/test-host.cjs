@@ -11,6 +11,13 @@ const path = require('node:path');
 
 const HOST = path.join(__dirname, '..', 'dist-host', 'host.cjs');
 let child = null;
+
+// The API the app defaults to on this platform, and what else it offers.
+// Mirrors platformApis() in src/audio/protocol.ts.
+const IS_WINDOWS = process.platform === 'win32';
+const PLATFORM = IS_WINDOWS
+  ? { primary: 'WASAPI', primaryApi: 7, match: /wasapi/i, apis: ['WASAPI', 'ASIO', 'DirectSound'] }
+  : { primary: 'PulseAudio', primaryApi: 4, match: /pulse/i, apis: ['PulseAudio', 'ALSA', 'JACK'] };
 let failures = 0;
 
 const log = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -121,27 +128,32 @@ app.whenReady().then(() => {
       }
 
       log('\nEnumeration checks');
-      check('host answered enumerate', Array.isArray(apis) && apis.length === 3);
-      const wasapi = apis.find((a) => a.label === 'WASAPI');
-      check('WASAPI reports devices', !!wasapi && wasapi.devices.length > 0);
-      check('WASAPI identifies as WASAPI', !!wasapi && /wasapi/i.test(wasapi.actualName), wasapi?.actualName);
-      const asio = apis.find((a) => a.label === 'ASIO');
-      check('ASIO probed without crashing', !!asio);
-      check('ASIO drivers found', !!asio && asio.devices.length + asio.unavailable.length > 0);
-      check('DirectSound probed', !!apis.find((a) => a.label === 'DirectSound'));
+      check('host answered enumerate', Array.isArray(apis) && apis.length === PLATFORM.apis.length);
+      const primary = apis.find((a) => a.label === PLATFORM.primary);
+      check(`${PLATFORM.primary} reports devices`, !!primary && primary.devices.length > 0);
+      check(
+        `${PLATFORM.primary} identifies as ${PLATFORM.primary}`,
+        !!primary && PLATFORM.match.test(primary.actualName),
+        primary?.actualName,
+      );
+      for (const label of PLATFORM.apis.slice(1)) check(`${label} probed without crashing`, !!apis.find((a) => a.label === label));
+      if (IS_WINDOWS) {
+        const asio = apis.find((a) => a.label === 'ASIO');
+        check('ASIO drivers found', !!asio && asio.devices.length + asio.unavailable.length > 0);
+      }
 
-      const out = wasapi?.devices.find((d) => d.isDefaultOutput && d.outputChannels > 0)
-        ?? wasapi?.devices.find((d) => d.outputChannels > 0);
+      const out = primary?.devices.find((d) => d.isDefaultOutput && d.outputChannels > 0)
+        ?? primary?.devices.find((d) => d.outputChannels > 0);
       if (!out) {
         check('found an output device to test', false);
         return finish();
       }
-      log(`\nOpening WASAPI "${out.name}" @ 48000 / 512`);
-      phase = 'wasapi';
+      log(`\nOpening ${PLATFORM.primary} "${out.name}" @ 48000 / 512`);
+      phase = 'primary';
       child.postMessage({
         type: 'open',
         config: {
-          api: 7,
+          api: PLATFORM.primaryApi,
           outputDeviceId: out.id,
           outputChannels: 2,
           outputFirstChannel: 0,
@@ -156,10 +168,10 @@ app.whenReady().then(() => {
       return;
     }
 
-    if (msg.type === 'status' && phase === 'wasapi') {
+    if (msg.type === 'status' && phase === 'primary') {
       // Handle exactly once: closing the stream emits another status, which
       // would otherwise re-enter this whole block with an empty one.
-      phase = 'wasapi-done';
+      phase = 'primary-done';
       const s = msg.status;
       log('\nStream');
       log(`  api=${s.api} rate=${s.sampleRate} frames=${s.frameSize} latency=${s.latencyEstimated ? '≈' : ''}${s.latencyMs.toFixed(1)}ms`);
@@ -187,6 +199,7 @@ app.whenReady().then(() => {
 
         // ASIO is exclusive; if the interface is in use elsewhere this is
         // expected to fail, so it is reported but never fails the suite.
+        if (!IS_WINDOWS) return finish();
         const asio = apis.find((a) => a.label === 'ASIO');
         const dev = asio?.devices[0];
         if (!dev) {

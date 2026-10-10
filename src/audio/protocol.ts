@@ -34,6 +34,37 @@ export const API_LABELS: Record<number, string> = {
   [AudioApi.LinuxOss]: 'OSS',
 };
 
+/**
+ * The APIs worth offering on each platform, best first. The first entry is the
+ * default and the one RtAudio is allowed to report as itself without being
+ * treated as a fallback.
+ *
+ * Linux puts PulseAudio first because that is what a desktop actually runs —
+ * on Fedora it is PipeWire's pulse server, which shares the device with every
+ * other application. ALSA opens the hardware directly and fails while PipeWire
+ * holds it. JACK is listed so its absence is explained: audify's prebuilt Linux
+ * binary is compiled without it, and RtAudio reports a fallback.
+ */
+export function platformApis(platform: string): AudioApi[] {
+  switch (platform) {
+    case 'win32':
+      return [AudioApi.WindowsWasapi, AudioApi.WindowsAsio, AudioApi.WindowsDirectSound];
+    case 'linux':
+      return [AudioApi.LinuxPulse, AudioApi.LinuxAlsa, AudioApi.UnixJack];
+    case 'darwin':
+      return [AudioApi.MacOsCore];
+    default:
+      return [];
+  }
+}
+
+/** Human list of a platform's APIs, for labels such as "Native driver (…)". */
+export function platformApiSummary(platform: string): string {
+  return platformApis(platform)
+    .map((a) => API_LABELS[a])
+    .join(' / ');
+}
+
 export interface AudioDevice {
   id: number;
   name: string;
@@ -68,7 +99,7 @@ export interface StreamConfig {
   inputChannels: number;
   inputFirstChannel: number;
   sampleRate: number;
-  /** 0 lets the driver choose, which is required for ASIO. */
+  /** 0 lets the driver choose, which is required for ASIO and JACK. */
   frameSize: number;
   minimizeLatency: boolean;
 }
@@ -88,8 +119,8 @@ export interface StreamStatus {
   error?: string;
 }
 
-export const defaultStreamConfig = (): StreamConfig => ({
-  api: AudioApi.WindowsWasapi,
+export const defaultStreamConfig = (platform = 'win32'): StreamConfig => ({
+  api: platformApis(platform)[0] ?? AudioApi.Unspecified,
   outputDeviceId: null,
   outputChannels: 2,
   outputFirstChannel: 0,

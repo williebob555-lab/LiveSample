@@ -1,7 +1,8 @@
 // ============================================================================
 // Audio host process.
 //
-// Owns RtAudio (WASAPI / ASIO / DirectSound) and the native renderer. Runs as
+// Owns RtAudio (WASAPI / ASIO / DirectSound on Windows, PulseAudio / ALSA on
+// Linux) and the native renderer. Runs as
 // an Electron utilityProcess so feeding the output queue never competes with
 // window management, IPC or GC on the main thread.
 //
@@ -19,6 +20,7 @@ import { decodeWav, isWav } from '../dsp/wav';
 import {
   AudioApi,
   API_LABELS,
+  platformApis,
   type ApiDevices,
   type AudioDevice,
   type HostEvent,
@@ -49,7 +51,9 @@ let inputPeak = 0;
 let interleaved = new Float32Array(0);
 let planar: Float32Array[] = [];
 
-const WINDOWS_APIS = [AudioApi.WindowsWasapi, AudioApi.WindowsAsio, AudioApi.WindowsDirectSound];
+const APIS = platformApis(process.platform);
+/** Reported as itself even when RtAudio's name for it does not match ours. */
+const PRIMARY_API = APIS[0];
 
 /**
  * One RtAudio instance per API, kept for the life of the process.
@@ -139,7 +143,7 @@ function enumerate(): ApiDevices[] {
   } catch (e) {
     // The native binary is missing or unloadable — report it once per API
     // rather than silently showing three empty device lists.
-    return WINDOWS_APIS.map((api) => ({
+    return APIS.map((api) => ({
       api,
       label: API_LABELS[api] ?? String(api),
       actualName: '',
@@ -149,7 +153,7 @@ function enumerate(): ApiDevices[] {
     }));
   }
 
-  for (const api of WINDOWS_APIS) {
+  for (const api of APIS) {
     const label = API_LABELS[api] ?? String(api);
     try {
       const probe = instanceFor(api);
@@ -160,14 +164,18 @@ function enumerate(): ApiDevices[] {
       // is unavailable, so an ASIO request can come back as WASAPI. Detecting
       // that is the difference between an honest list and a lie.
       const matches = actualName.toLowerCase().includes(label.toLowerCase().slice(0, 4));
-      if (!matches && api !== AudioApi.WindowsWasapi) {
+      if (!matches && api !== PRIMARY_API) {
         result.push({
           api,
           label,
           actualName,
           devices: [],
           unavailable: api === AudioApi.WindowsAsio ? asioInstalled : [],
-          error: `Not available (RtAudio fell back to ${actualName})`,
+          error:
+            `Not available (RtAudio fell back to ${actualName})` +
+            (api === AudioApi.UnixJack
+              ? '. This build has no JACK support; under PipeWire, PulseAudio reaches the same devices.'
+              : ''),
         });
         continue;
       }
@@ -356,7 +364,10 @@ async function openStream(cfg: StreamConfig): Promise<void> {
     cfg.api === AudioApi.WindowsAsio
       ? `${failure} ASIO drivers are exclusive — close anything else using this interface ` +
         '(a DAW, a browser tab, or system audio routed through it) and try again.'
-      : (failure ?? 'Could not open the device.');
+      : cfg.api === AudioApi.LinuxAlsa
+        ? `${failure ?? 'Could not open the device.'} ALSA opens the hardware directly, and PipeWire normally holds it — ` +
+          'use PulseAudio instead, or pick a "pipewire" / "default" ALSA device.'
+        : (failure ?? 'Could not open the device.');
   send({ type: 'status', status: { ...status(), error: message } });
   send({ type: 'error', message });
 }

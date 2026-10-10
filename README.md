@@ -6,27 +6,49 @@ and export to SFZ, DecentSampler and Ableton.
 The working name is deliberately plain; the brand is not decided yet. Every
 visual value lives in `src/styles/tokens.css`, so re-theming is one file.
 
-## Run it
+## Quick start
+
+Requirements: **Node 20+** (22 LTS recommended) and git. Electron is installed
+by npm; nothing else is needed on Windows. On Linux see
+[Fedora / Linux](#fedora--linux) for the few system packages first.
 
 ```bash
+git clone https://github.com/williebob555-lab/LiveSample.git
+cd LiveSample
 npm install
-npm start
+npm start          # builds, then opens the desktop app
 ```
 
-Development with hot reload (works in a plain browser too, minus the native
-file dialogs):
+After the first build, `npm run electron` opens the app without rebuilding.
 
-```bash
-npm run dev
-```
+### Making an instrument
 
-Checks:
+1. **Audio devices** — pick an engine and interface. *System (Web Audio)* works
+   immediately; *Native driver* gives buffer control and is what you want for
+   recording (see [Audio devices](#audio-devices)).
+2. **Takes** — either import existing recordings (files, a folder, or one long
+   take that gets split at the silences) or start a **capture session** and just
+   play: the app names each note, waits for it to finish and moves on.
+3. **Analyse and clean up** — pitch detection, trimming, level matching and
+   loop finding run automatically; override anything per take.
+4. **Map** — auto-map lays takes out across the keyboard; the coverage band
+   shows anywhere that is missing or stretched too far. Fill gaps by repitch if
+   you need a fully chromatic instrument.
+5. **Refine** — envelope, filter, loops.
+6. **Export** — SFZ, DecentSampler or a WAV folder with embedded root/loop
+   data. Save the project (`.sinst` folder) to come back to it.
 
-```bash
-npm run typecheck
-npm run selftest
-npm run test:audio
-```
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm start` | Type-check, build the UI and audio host, launch Electron. |
+| `npm run electron` | Launch the last build without rebuilding. |
+| `npm run dev` | Vite dev server with hot reload. Works in a plain browser too, minus native dialogs and native audio. Point Electron at it with `SAMPLER_DEV_URL=http://localhost:5210 npm run electron`. |
+| `npm run typecheck` | `tsc --noEmit`. |
+| `npm run selftest` | The DSP, model and exporter checks (below). No audio hardware needed. |
+| `npm run test:audio` | Boots the real audio host and plays a note through actual hardware. |
+| `npm run install:desktop` | Linux only: add a launcher entry (`-- --remove` to undo). |
 
 `selftest` exercises the parts a screenshot cannot check — pitch detection
 accuracy across the range, the WAV `smpl` chunk round trip, loop finding,
@@ -34,8 +56,56 @@ repitch accuracy, key-range arithmetic and the generated SFZ and DecentSampler
 output, plus note-name parsing and capture/retake planning. 106 assertions,
 all passing.
 
-`test:audio` boots the real audio host, enumerates every driver API, opens a
-stream on actual hardware, plays a note and checks that signal came out.
+`test:audio` boots the real audio host, enumerates every driver API for the
+current platform, opens a stream on the default device of the primary one
+(WASAPI on Windows, PulseAudio on Linux), plays a note and checks that signal
+came out. On Windows it additionally tries ASIO duplex.
+
+## Fedora / Linux
+
+Tested target: **Fedora KDE Plasma** (Wayland session, PipeWire). Other
+current distributions running PipeWire or PulseAudio behave the same.
+
+```bash
+sudo dnf install nodejs npm git alsa-lib pulseaudio-libs
+git clone https://github.com/williebob555-lab/LiveSample.git && cd LiveSample
+npm install
+npm start
+npm run install:desktop   # optional: LiveSample in the Plasma launcher
+```
+
+`pulseaudio-libs` is only the client library — Fedora uses PipeWire, and its
+`pipewire-pulseaudio` server (installed by default) is what the app talks to.
+Both packages are normally already present on a desktop install.
+
+**Which driver to pick.** In *Audio devices → Native driver*:
+
+| API | Use it when |
+| --- | --- |
+| **PulseAudio** (default) | Almost always. Goes through PipeWire, shares the interface with everything else, honours the requested buffer size as a latency target. Your USB interface shows up here by its PipeWire name. |
+| **ALSA** | You want the raw hardware. `hw:` devices are exclusive and PipeWire normally holds them, so opening one fails while the desktop is using it — pick the `pipewire` or `default` ALSA device to share instead. |
+| **JACK** | Listed but unavailable: audify's prebuilt Linux binary is compiled without JACK. Under PipeWire nothing is lost — PulseAudio reaches the same devices. |
+
+For lower latency, lower PipeWire's quantum (e.g. `pw-metadata -n settings 0
+clock.force-quantum 128`) or set it permanently in
+`~/.config/pipewire/pipewire.conf.d/`. The latency shown in the dialog is what
+the server actually granted, not what was asked for. Pick the interface's sample
+rate in KDE's audio settings (or `clock.force-rate`) to avoid resampling.
+
+**Desktop integration.** On Linux the app runs natively on Wayland
+(`ozone-platform-hint=auto`, falling back to X11 without a compositor), so it
+stays sharp under KDE's fractional scaling. `npm run install:desktop` writes
+`~/.local/share/applications/livesample.desktop`, pointing at this checkout —
+after `git pull && npm run build` the launcher runs the new version.
+
+**Troubleshooting.**
+
+- *PulseAudio shows no devices* — the session's sound server is not running:
+  `systemctl --user status pipewire-pulse`.
+- *`test:audio` fails with "Connection refused"* — same cause; it needs a
+  running desktop session, not an SSH shell or container.
+- *Electron exits with a sandbox error* (only with unusual kernel settings):
+  run `npx electron --no-sandbox .`.
 
 ## Audio devices
 
@@ -46,16 +116,19 @@ hear.
 | Backend | What it gets you |
 | --- | --- |
 | **System (Web Audio)** | Zero setup, works in a browser. Device choice via `enumerateDevices` / `setSinkId`. Shared-mode only, so no ASIO and no buffer control. |
-| **Native (RtAudio)** | WASAPI, DirectSound and **ASIO**, with real sample-rate and buffer-size control, channel offsets, and duplex. |
+| **Native (RtAudio)** | Windows: WASAPI, DirectSound and **ASIO**. Linux: PulseAudio (PipeWire) and ALSA. Real sample-rate and buffer-size control, channel offsets, and duplex. |
 
 Native audio runs in an Electron `utilityProcess` (`src/audio/host.ts`) with its
 own voice renderer (`src/audio/render.ts`). Feeding an output queue on the main
 thread, alongside window management and GC, is how you get dropouts.
 
-Verified on this machine: WASAPI at 48 kHz / 512 frames (≈10.7 ms), and ASIO
+The API list is per platform (`platformApis` in `src/audio/protocol.ts`), and
+a saved configuration naming another platform's API falls back to the default.
+
+Verified on Windows: WASAPI at 48 kHz / 512 frames (≈10.7 ms), and ASIO
 duplex on a Yamaha Steinberg USB driver at 48 kHz / 256 frames (21.1 ms).
 
-Four things here cost real debugging time and are worth not re-learning:
+Five things here cost real debugging time and are worth not re-learning:
 
 - **Electron must be 35+.** audify's prebuilt binary is N-API v10; Electron 33
   ships Node 20, which only provides N-API 9, and loading it *hard-crashes* the
@@ -71,6 +144,11 @@ Four things here cost real debugging time and are worth not re-learning:
   streaming through a different one can open the wrong device — and a discarded
   ASIO probe keeps the driver open until GC, so the next open fails with
   "Another RtAudio ASIO stream is open". The host keeps one instance per API.
+- **RtAudio falls back silently.** Ask for an API that is not compiled in or
+  not running (ASIO with no driver, JACK on the Linux prebuilt) and you get a
+  working instance of a *different* API. The host compares the reported name
+  and marks the request unavailable rather than listing the fallback's devices
+  under the wrong label.
 
 ASIO drivers are exclusive: if a DAW, a browser tab, or system audio is using
 the interface, opening will fail. The host retries once, verifies the stream is
@@ -279,12 +357,13 @@ MyPiano.sinst/
 src/
   core/      types.ts (the model) · automap · pipeline · project · native
   dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft
-  audio/     store (decoded audio) · engine (audition)
   export/    context (filenames) · sfz · decentsampler · index (targets, warnings)
+  audio/     store (decoded audio) · engine (audition) · output · host · render · protocol
   ui/        primitives · zonemap · keyboard · waveform · studio · session
   styles/    tokens.css · app.css
 electron/    main.cjs · preload.cjs
-scripts/     selftest.ts
+linux/       livesample.desktop.in
+scripts/     selftest.ts · test-host.cjs · build-host.mjs · install-linux.sh
 ```
 
 The audition engine deliberately uses the same selection rules the exporters
@@ -301,7 +380,8 @@ makes the self-test possible and keeps the door open to reusing them elsewhere.
   nothing exposed to the user. Making all ~45 visual parameters adjustable in an
   earlier project meant nothing had a designed default.
 - Bundling Inter finishes the typography. The fallback on Windows is Segoe UI,
-  which reads as a Windows utility rather than a music product.
+  which reads as a Windows utility rather than a music product; on Linux it is
+  whatever the desktop's sans is (Noto Sans on Fedora KDE).
 - Numbers use tabular figures everywhere. Values that jitter horizontally as
   they change are the loudest amateur tell in audio software.
 
@@ -310,14 +390,18 @@ makes the self-test possible and keeps the door open to reusing them elsewhere.
 Working: import (files, folders, long-take splitting), analysis, cleanup and
 level matching, auto-mapping, loop finding, gap filling by repitch, the audition
 engine, zone editing, capture sessions with reference pitches, audio device
-selection across WASAPI / ASIO / DirectSound, and SFZ / DecentSampler / WAV
+selection across WASAPI / ASIO / DirectSound on Windows and PulseAudio
+(PipeWire) / ALSA on Linux, and SFZ / DecentSampler / WAV
 export.
 
 Not yet: MIDI input and unattended MIDI-driven capture, mic-position blending,
 articulation editing UI, native Ableton `.adg`, DecentSampler UI designer,
 denoising.
 
-Untested against real hardware: the capture session end to end, including
+Untested against real hardware: the Linux native path on a live PipeWire
+session (enumeration and the fallback reporting are verified; no stream has
+been opened on real Linux audio hardware yet — `npm run test:audio` on a Fedora
+desktop is the check); the capture session end to end, including
 re-recording (the microphone path is written and the driver layer is verified,
-but no take has been recorded through it), and `.sinst` save/load round-tripping
+but no take has been recorded through it); and `.sinst` save/load round-tripping
 through the native dialogs.

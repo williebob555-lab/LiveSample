@@ -8,6 +8,17 @@ const fs = require('node:fs/promises');
 
 const DEV_URL = process.env.SAMPLER_DEV_URL || '';
 
+if (process.platform === 'linux') {
+  // Run natively on Wayland (KDE Plasma's default session) rather than through
+  // XWayland, which blurs the UI on fractional scaling. Falls back to X11 on
+  // its own when there is no Wayland compositor.
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+  // Matches the installed .desktop file, so Plasma groups the window under the
+  // right launcher and taskbar entry instead of a generic Electron one.
+  app.setDesktopName('livesample.desktop');
+}
+
 let win = null;
 
 // Unsaved-changes state, mirrored from the renderer. The check lives here

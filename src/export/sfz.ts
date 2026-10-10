@@ -94,7 +94,10 @@ function rrCount(group: Group, zone: Zone): number {
 }
 
 function zoneOpcodes(zone: Zone, group: Group, inst: Instrument, ctx: ExportContext): string[] {
-  const ops: string[] = [`sample=${ctx.fileFor(zone.sampleId).replace(/\//g, '\\')}`];
+  // Forward slashes: every current player (sfizz, sforzando, LinuxSampler)
+  // accepts them on every OS, whereas backslashes only work where the player
+  // happens to translate them.
+  const ops: string[] = [`sample=${ctx.fileFor(zone.sampleId).replace(/\\/g, '/')}`];
 
   ops.push(`lokey=${zone.keyLow}`, `hikey=${zone.keyHigh}`, `pitch_keycenter=${zone.rootKey}`);
 
@@ -163,7 +166,7 @@ export function exportSfz(ctx: ExportContext): string {
   lines.push('');
 
   lines.push('<control>');
-  lines.push('default_path=samples\\');
+  lines.push('default_path=samples/');
   lines.push('');
 
   lines.push('<global>');
