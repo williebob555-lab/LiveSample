@@ -14,6 +14,7 @@ import { openAudioSettings } from './ui/audio-settings';
 import type { Stage } from './ui/app';
 import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
+import { markSvg } from './ui/brand';
 import { recentProjects } from './core/project';
 import { writeRecovery, findRecovery, loadRecovery, clearRecovery } from './core/recovery';
 import { checkForUpdates, checkForUpdatesQuietly, onUpdateAvailable } from './ui/updates';
@@ -67,12 +68,7 @@ function syncStageRail(): void {
  *  topbar size, so it is set as plain text here (brand/README.md). */
 function brandMark(): HTMLElement {
   const span = el('span', { class: 'brand', title: 'LiveSample' });
-  span.innerHTML =
-    '<svg viewBox="0 0 256 256" width="18" height="18" aria-hidden="true">' +
-    '<rect width="256" height="256" rx="56" fill="#14161a"/>' +
-    '<path d="M118 192 H162 C190 192 206 178 206 156 C206 134 188 127 164 123 C140 119 124 110 124 92 C124 74 140 64 162 64 H198" fill="none" stroke="#5fb2ff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>' +
-    '<path d="M58 64 V192 H118" fill="none" stroke="#e8a13d" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>' +
-    '</svg><span>Live<b>Sample</b></span>';
+  span.append(markSvg(18), el('span', {}, ['Live', el('b', { text: 'Sample' })]));
   return span;
 }
 

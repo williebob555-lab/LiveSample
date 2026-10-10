@@ -18,6 +18,7 @@ import { EnvelopeView, FilterView } from './curves';
 import { CoverageStrip } from './coverage';
 import { audio } from '../audio/output';
 import { openAudioSettings } from './audio-settings';
+import { markSvg } from './brand';
 import { sampleStore } from '../audio/store';
 import { midiName } from '../dsp/pitch';
 import { STRETCH_GUIDANCE } from '../dsp/resample';
@@ -370,31 +371,7 @@ export class Studio {
 
   /** Empty-instrument welcome: the three ways to start. */
   private welcomeCard(): HTMLElement {
-    const NS = 'http://www.w3.org/2000/svg';
-    // Same geometry as the favicon-style mark: an amber rounded square holding
-    // five waveform bars, tallest in the middle.
-    const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 64 64');
-    svg.setAttribute('width', '72');
-    svg.setAttribute('height', '72');
-    svg.setAttribute('aria-hidden', 'true');
-    const rect = document.createElementNS(NS, 'rect');
-    for (const [k, v] of Object.entries({ width: '64', height: '64', rx: '14', fill: 'var(--accent)' }))
-      rect.setAttribute(k, v);
-    svg.append(rect);
-    [[14, 16], [22, 28], [30, 40], [38, 28], [46, 16]].forEach(([x, h]) => {
-      const bar = document.createElementNS(NS, 'rect');
-      for (const [k, v] of Object.entries({
-        x: String(x),
-        y: String(32 - h / 2),
-        width: '4',
-        height: String(h),
-        rx: '2',
-        fill: 'var(--text-on-accent)',
-      }))
-        bar.setAttribute(k, v);
-      svg.append(bar);
-    });
+    const svg = markSvg(72);
 
     const action = (title: string, sub: string, run: () => void, primary = false) =>
       el('button', { class: `welcome-action ${primary ? 'primary' : ''}`, onclick: run }, [
