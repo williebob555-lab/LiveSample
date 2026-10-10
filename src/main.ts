@@ -10,6 +10,7 @@ import { openAudioSettings } from './ui/audio-settings';
 import type { Stage } from './ui/app';
 import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
+import { checkForUpdates, checkForUpdatesQuietly, onUpdateAvailable } from './ui/updates';
 
 const host = document.getElementById('app');
 if (!host) throw new Error('#app is missing from index.html');
@@ -56,8 +57,19 @@ function syncStageRail(): void {
     nameInput.value = app.instrument.name;
 }
 
+const updateButton = el('button', {
+  class: 'sm ghost',
+  text: 'Updates',
+  title: 'Check for updates',
+  onclick: () => void checkForUpdates(),
+});
+onUpdateAvailable((version) => {
+  updateButton.textContent = `Update to ${version}`;
+  updateButton.classList.add('update-available');
+});
+
 const topbar = el('div', { class: 'topbar' }, [
-  el('span', { class: 'brand', text: 'Sampler' }),
+  el('span', { class: 'brand', text: 'LiveSample' }),
   nameInput,
   el('div', { class: 'spacer' }),
   stageRail,
@@ -70,6 +82,7 @@ const topbar = el('div', { class: 'topbar' }, [
   el('button', { class: 'sm ghost', text: 'Audio…', onclick: () => openAudioSettings() }),
   el('button', { class: 'sm ghost', text: 'Open', onclick: () => void studio.open() }),
   el('button', { class: 'sm ghost', text: 'Save', onclick: () => void studio.save() }),
+  updateButton,
 ]);
 
 host.append(topbar, studio.root);
@@ -130,6 +143,8 @@ if (import.meta.env.DEV) {
 // what it is told.
 if (hasNative && native) {
   const host = native;
+  // After the window has settled, so a slow network never delays startup.
+  setTimeout(() => void checkForUpdatesQuietly(), 5000);
   app.onDirtyChange((dirty) => host.setDirty(dirty));
   host.setDirty(app.dirty);
 

@@ -2,6 +2,15 @@
 // site checks `hasNative` and falls back, so `npm run dev` in a browser stays
 // usable for UI work without booting Electron.
 
+export interface UpdateCheck {
+  state: 'available' | 'none' | 'downloaded' | 'error' | 'unsupported';
+  current: string;
+  version?: string;
+  notes?: string;
+  date?: string;
+  error?: string;
+}
+
 export interface SamplerNative {
   openAudio(): Promise<string[] | null>;
   openFolder(): Promise<string[] | null>;
@@ -16,6 +25,12 @@ export interface SamplerNative {
   basename(path: string): Promise<string>;
   userData(): Promise<string>;
   documents(): Promise<string>;
+
+  version(): Promise<string>;
+  updatesCheck(): Promise<UpdateCheck>;
+  updatesDownload(): Promise<{ ok: boolean; error?: string; version?: string }>;
+  updatesInstall(): Promise<{ ok: boolean; error?: string }>;
+  onUpdateProgress(fn: (p: { percent: number; transferred: number; total: number }) => void): () => void;
 
   /** Keep the main process informed so it can prompt before closing. */
   setDirty(dirty: boolean): void;

@@ -272,3 +272,106 @@ ipcMain.on('app:closeReady', () => {
 
 ipcMain.handle('app:userData', () => app.getPath('userData'));
 ipcMain.handle('app:documents', () => app.getPath('documents'));
+
+// ---------------------------------------------------------------------------
+// In-app updates
+//
+// electron-updater against GitHub Releases (`publish` in electron-builder.yml).
+// Only installed builds can update: the NSIS installer on Windows and the
+// AppImage on Linux — electron-builder writes the update feed (latest.yml /
+// latest-linux.yml) for those targets, and they are the ones electron-updater
+// knows how to replace in place. A dev checkout or an unpacked dir reports
+// `unsupported` and updates by `git pull` instead.
+// ---------------------------------------------------------------------------
+
+let updater = null; // required lazily: absent from the dev flow's hot path
+let updateReady = null; // version string once the update is on disk
+
+function updatesSupported() {
+  if (process.env.SAMPLER_UPDATE_DEV) return true;
+  if (!app.isPackaged) return false;
+  // On Linux only the AppImage can replace itself; electron-updater finds it
+  // through this variable, which the AppImage runtime sets.
+  if (process.platform === 'linux') return !!process.env.APPIMAGE;
+  return process.platform === 'win32';
+}
+
+function sendToRenderer(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+function getUpdater() {
+  if (updater) return updater;
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = false; // the user opts in
+  // A downloaded update still lands if the user just quits instead of
+  // restarting from the prompt.
+  autoUpdater.autoInstallOnAppQuit = true;
+  if (process.env.SAMPLER_UPDATE_DEV) autoUpdater.forceDevUpdateConfig = true;
+  autoUpdater.on('download-progress', (p) => {
+    sendToRenderer('updates:progress', {
+      percent: p.percent || 0,
+      transferred: p.transferred || 0,
+      total: p.total || 0,
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    updateReady = info.version || '';
+  });
+  updater = autoUpdater;
+  return updater;
+}
+
+ipcMain.handle('updates:check', async () => {
+  const current = app.getVersion();
+  if (!updatesSupported()) return { state: 'unsupported', current };
+  if (updateReady !== null) return { state: 'downloaded', current, version: updateReady };
+  try {
+    const r = await getUpdater().checkForUpdates();
+    // electron-updater signals "nothing newer" by echoing the current version,
+    // not by returning null.
+    const info = r && r.updateInfo;
+    if (!info || !info.version || info.version === current || r.isUpdateAvailable === false)
+      return { state: 'none', current };
+    const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes : '';
+    return { state: 'available', current, version: info.version, notes, date: info.releaseDate || '' };
+  } catch (e) {
+    return { state: 'error', current, error: describeUpdateError(e) };
+  }
+});
+
+/** electron-updater errors carry full HTTP headers; keep what a person needs. */
+function describeUpdateError(e) {
+  const raw = (e && e.message) || String(e);
+  if (/\b404\b/.test(raw))
+    return 'No release feed found. Either nothing has been released yet, or the repository is private ' +
+      '(the app downloads anonymously, so releases must be public).';
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|net::/.test(raw)) return 'No connection to github.com.';
+  return raw.split('\n')[0];
+}
+
+ipcMain.handle('updates:download', async () => {
+  if (!updatesSupported()) return { ok: false, error: 'Not an installed build.' };
+  if (updateReady !== null) return { ok: true, version: updateReady };
+  try {
+    await getUpdater().downloadUpdate();
+    // `update-downloaded` normally fires first; don't let a missed event leave
+    // a finished download uninstallable.
+    if (updateReady === null) updateReady = '';
+    return { ok: true, version: updateReady };
+  } catch (e) {
+    return { ok: false, error: describeUpdateError(e) };
+  }
+});
+
+ipcMain.handle('updates:install', async () => {
+  if (updateReady === null) return { ok: false, error: 'No update has been downloaded.' };
+  // The renderer refuses to get here with unsaved changes, so skipping the
+  // close prompt is safe. Release the audio driver before the process goes.
+  forceClose = true;
+  stopAudioHost();
+  setImmediate(() => getUpdater().quitAndInstall(true, true));
+  return { ok: true };
+});
+
+ipcMain.handle('app:version', () => app.getVersion());

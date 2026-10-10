@@ -9,7 +9,8 @@
 const { app, utilityProcess } = require('electron');
 const path = require('node:path');
 
-const HOST = path.join(__dirname, '..', 'dist-host', 'host.cjs');
+// SAMPLER_TEST_HOST points at a packaged build's host to check it in place.
+const HOST = process.env.SAMPLER_TEST_HOST || path.join(__dirname, '..', 'dist-host', 'host.cjs');
 let child = null;
 
 // The API the app defaults to on this platform, and what else it offers.

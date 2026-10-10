@@ -9,4 +9,4 @@ Icon=audio-x-generic
 Terminal=false
 Categories=AudioVideo;Audio;Music;
 Keywords=sampler;sfz;decentsampler;instrument;recording;
-StartupWMClass=sampler-app
+StartupWMClass=livesample
