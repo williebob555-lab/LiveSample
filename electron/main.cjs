@@ -2,7 +2,7 @@
 // things a browser cannot: native dialogs and direct filesystem access for
 // .sinst instrument folders (which hold hundreds of MB of samples and must
 // never be copied through IndexedDB).
-const { app, BrowserWindow, ipcMain, dialog, utilityProcess } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, utilityProcess, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
@@ -84,6 +84,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // No handler existed before, which in Electron means every permission is
+  // granted. Keep that behaviour (the microphone for Web Audio capture depends
+  // on it) but spell 'midi' out, and refuse sysex, which nothing here uses.
+  const allow = (permission) => permission !== 'midiSysex';
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) =>
+    callback(allow(permission)),
+  );
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allow(permission));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -25,6 +25,16 @@ import {
   sampleIdentity,
   stepIdentity,
 } from '../src/core/capture';
+import {
+  parseMidiMessage,
+  channelMatches,
+  layerVelocity,
+  midiTakeFinished,
+  midiOnsetTimedOut,
+  midiNoteOnBytes,
+  midiNoteOffBytes,
+  midiAllNotesOffBytes,
+} from '../src/core/midi';
 import { makeContext } from '../src/export/context';
 import { exportSfz } from '../src/export/sfz';
 import { exportDecentSampler } from '../src/export/decentsampler';
@@ -460,6 +470,37 @@ group('Mono mixdown');
   const r = new Float32Array([-1, 0, 1]);
   const m = toMono([l, r]);
   check('averages channels', m[0] === 0 && m[1] === 0.5 && m[2] === 1, Array.from(m).join(','));
+}
+
+group('MIDI');
+{
+  const on = parseMidiMessage([0x93, 60, 100]);
+  check('note-on parses, channel is 1-based', on?.type === 'noteOn' && on.channel === 4 && on.note === 60 && on.velocity === 100);
+  const zero = parseMidiMessage([0x90, 60, 0]);
+  check('velocity-0 note-on is a note-off', zero?.type === 'noteOff' && zero.note === 60);
+  check('note-off parses', parseMidiMessage([0x80, 61, 64])?.type === 'noteOff');
+  const ped = parseMidiMessage([0xb0, 64, 127]);
+  const up = parseMidiMessage([0xb0, 64, 0]);
+  check('sustain down/up', ped?.type === 'sustain' && ped.down && up?.type === 'sustain' && !up.down);
+  check('CC123 is all-notes-off', parseMidiMessage([0xb2, 123, 0])?.type === 'allNotesOff');
+  check('unhandled CC ignored', parseMidiMessage([0xb0, 7, 90]) === null);
+  check('clock/sysex ignored', parseMidiMessage([0xf8]) === null && parseMidiMessage([0xf0, 1, 0xf7]) === null);
+  const bend = parseMidiMessage([0xe0, 0, 64]);
+  check('pitch bend centre is 0', bend?.type === 'pitchBend' && bend.value === 0);
+  check('channel filter', channelMatches(0, 9) && channelMatches(3, 3) && !channelMatches(3, 4));
+  check('output bytes', midiNoteOnBytes(2, 60, 100).join() === '145,60,100' && midiNoteOffBytes(2, 60).join() === '129,60,0' && midiAllNotesOffBytes(16).join() === '191,123,0');
+  check('note-on velocity never 0', midiNoteOnBytes(1, 60, 0)[2] === 1);
+
+  check('single layer velocity', layerVelocity(1, 1) === 100);
+  const vels = [1, 2, 3, 4].map((l) => layerVelocity(l, 4));
+  check('layer velocities rise from 32 to 127', vels[0] === 32 && vels[3] === 127 && vels.every((v, i) => i === 0 || v > vels[i - 1]), vels.join(','));
+
+  const o = { noteLength: 2, releaseTail: 1.5, silenceTimeout: 0.6 };
+  check('take never ends while key held', !midiTakeFinished(1, 5, o));
+  check('silence after note-off ends take', midiTakeFinished(2.2, 0.7, o));
+  check('no silence yet: keeps waiting', !midiTakeFinished(2.5, 0.2, o));
+  check('tail is a hard ceiling', midiTakeFinished(3.5, 0, o));
+  check('onset timeout only after tail + grace', !midiOnsetTimedOut(4, o) && midiOnsetTimedOut(5.5, o));
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

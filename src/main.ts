@@ -4,9 +4,10 @@ import './styles/app.css';
 import { app, toast } from './ui/app';
 import { el } from './ui/dom';
 import { Studio } from './ui/studio';
-import { SessionScreen } from './ui/session';
+import { SessionScreen, type MidiDrive } from './ui/session';
 import { audio } from './audio/output';
 import { openAudioSettings } from './ui/audio-settings';
+import { midi } from './audio/midi';
 import type { Stage } from './ui/app';
 import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
@@ -91,23 +92,27 @@ host.append(topbar, studio.root);
 
 let session: SessionScreen | null = null;
 
-async function launchSession(plan: CapturePlan, steps?: CaptureStep[]): Promise<void> {
+async function launchSession(plan: CapturePlan, steps?: CaptureStep[], drive?: MidiDrive | null): Promise<void> {
   // Auditioning and capturing at the same time would bleed one into the other,
   // so the engine stands down for the duration.
   audio.allNotesOff();
+  midi.releaseAll();
+  midi.auditionEnabled = false;
   const screen = new SessionScreen(() => {
     screen.root.remove();
     session = null;
+    midi.auditionEnabled = true;
     app.stage = 'takes';
     app.touch(false);
     toast('Session ended');
   });
   session = screen;
   studio.root.append(screen.root);
-  const ok = await screen.start(plan, steps);
+  const ok = await screen.start(plan, steps, drive);
   if (!ok) {
     screen.root.remove();
     session = null;
+    midi.auditionEnabled = true;
   }
 }
 
@@ -116,7 +121,7 @@ function startSession(retakeOf?: Sample[]): void {
   if (retakeOf?.length) {
     SessionScreen.retake(retakeOf, (plan, steps) => void launchSession(plan, steps));
   } else {
-    SessionScreen.configure((plan) => void launchSession(plan));
+    SessionScreen.configure((plan, drive) => void launchSession(plan, undefined, drive));
   }
 }
 
@@ -124,6 +129,11 @@ function startSession(retakeOf?: Sample[]): void {
 app.requestCapture = startSession;
 
 // --- Boot ------------------------------------------------------------------
+
+// Light the on-screen keys for notes arriving over MIDI, and start listening.
+// Failure (no permission, no Web MIDI) is surfaced in the MIDI dialog, not here.
+midi.onNote((n, on) => (on ? studio.keyboardView.noteOn(n) : studio.keyboardView.noteOff(n)));
+void midi.init();
 
 app.onChange(syncStageRail);
 syncStageRail();

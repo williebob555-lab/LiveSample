@@ -18,6 +18,7 @@ import { EnvelopeView, FilterView } from './curves';
 import { CoverageStrip } from './coverage';
 import { audio } from '../audio/output';
 import { openAudioSettings } from './audio-settings';
+import { openMidiSettings } from './midi-settings';
 import { sampleStore } from '../audio/store';
 import { midiName } from '../dsp/pitch';
 import { STRETCH_GUIDANCE } from '../dsp/resample';
@@ -138,6 +139,7 @@ export class Studio {
         },
       }),
       el('button', { class: 'sm ghost', text: 'Devices…', onclick: () => openAudioSettings() }),
+      el('button', { class: 'sm ghost', text: 'MIDI…', onclick: () => openMidiSettings() }),
       el('button', { class: 'sm ghost', text: 'Panic', onclick: () => audio.allNotesOff() }),
       this.meter.root,
       this.deviceEl,

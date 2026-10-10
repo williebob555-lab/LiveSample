@@ -120,6 +120,8 @@ export interface ModalOptions {
   cancelLabel?: string;
   onConfirm?: () => void | Promise<void>;
   wide?: boolean;
+  /** Runs however the dialog closes (button, Esc, click outside). */
+  onClose?: () => void;
 }
 
 export function modal(opts: ModalOptions): () => void {
@@ -129,6 +131,7 @@ export function modal(opts: ModalOptions): () => void {
   const close = () => {
     scrim.remove();
     document.removeEventListener('keydown', onKey);
+    opts.onClose?.();
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close();
