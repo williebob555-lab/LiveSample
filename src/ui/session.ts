@@ -29,6 +29,52 @@ import {
 import { newId, type CapturePlan, type CaptureStep, type Sample } from '../core/types';
 import { analyzeSample } from '../core/pipeline';
 import { audio } from '../audio/output';
+import { midi } from '../audio/midi';
+import {
+  layerVelocity,
+  midiOnsetTimedOut,
+  midiTakeFinished,
+  type MidiCaptureOptions,
+} from '../core/midi';
+
+/** Unattended-capture settings. Kept beside the app rather than in the
+ *  CapturePlan: they describe the rig on this machine (which port the synth is
+ *  on), not the instrument, so they should not travel inside a project file. */
+export interface MidiDrive {
+  enabled: boolean;
+  outputId: string;
+  channel: number;
+  /** Seconds the note is held. */
+  noteLength: number;
+  /** Seconds to wait after note-off for the release. */
+  releaseTail: number;
+}
+
+const MIDI_DRIVE_KEY = 'sampler.midi.capture';
+
+function loadMidiDrive(): MidiDrive {
+  const base: MidiDrive = { enabled: false, outputId: '', channel: 1, noteLength: 2, releaseTail: 1.5 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(MIDI_DRIVE_KEY) ?? 'null') as Partial<MidiDrive> | null;
+    if (saved) {
+      if (typeof saved.outputId === 'string') base.outputId = saved.outputId;
+      if (typeof saved.channel === 'number') base.channel = clamp(Math.round(saved.channel), 1, 16);
+      if (typeof saved.noteLength === 'number') base.noteLength = clamp(saved.noteLength, 0.1, 30);
+      if (typeof saved.releaseTail === 'number') base.releaseTail = clamp(saved.releaseTail, 0, 30);
+    }
+  } catch {
+    /* defaults */
+  }
+  return base;
+}
+
+function saveMidiDrive(d: MidiDrive): void {
+  try {
+    localStorage.setItem(MIDI_DRIVE_KEY, JSON.stringify(d));
+  } catch {
+    /* not persisted */
+  }
+}
 
 // A worklet that simply forwards every input block to the main thread. Kept
 // inline as a blob so there is no second build entry point to keep in sync.
@@ -82,6 +128,15 @@ export class SessionScreen {
   private recordedFrames = 0;
   private level = 0;
   private onExit: () => void;
+
+  /** Set when this session plays its own notes over MIDI. */
+  private drive: MidiDrive | null = null;
+  private noteOnAt = 0;
+  private noteOnTimer: ReturnType<typeof setTimeout> | null = null;
+  private noteOffTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchTimer: ReturnType<typeof setInterval> | null = null;
+  private soundingNote: number | null = null;
+  private skipped = 0;
 
   constructor(onExit: () => void) {
     this.onExit = onExit;
@@ -177,7 +232,7 @@ export class SessionScreen {
   }
 
   /** Ask for the plan, then start. Resolves false when the user cancels. */
-  static configure(onStart: (plan: CapturePlan) => void): void {
+  static configure(onStart: (plan: CapturePlan, drive: MidiDrive | null) => void): void {
     const inst = app.instrument;
     // Edits mutate the instrument's own plan, so the settings survive
     // cancelling the dialog, finishing a session, and saving the project.
@@ -257,6 +312,77 @@ export class SessionScreen {
       ],
     );
 
+    const drive = loadMidiDrive();
+    const driveBody = el('div', { style: 'display:none' });
+    const renderDrive = (): void => {
+      clear(driveBody);
+      if (!midi.ready) {
+        driveBody.append(
+          el('div', { class: 'notice warn', text: midi.error ?? 'MIDI is not available.' }),
+        );
+        return;
+      }
+      if (!midi.outputs.length) {
+        driveBody.append(el('div', { class: 'notice warn', text: 'No MIDI outputs found. Plug one in and it will appear here.' }));
+        return;
+      }
+      if (!midi.outputs.some((p) => p.id === drive.outputId)) drive.outputId = midi.outputs[0].id;
+      driveBody.append(
+        field(
+          'Output',
+          selectBox(
+            midi.outputs.map((p) => ({ value: p.id, label: p.name })),
+            drive.outputId,
+            (v) => {
+              drive.outputId = v;
+              saveMidiDrive(drive);
+            },
+          ),
+        ),
+        field(
+          'Channel',
+          numberField(drive.channel, (v) => {
+            drive.channel = clamp(Math.round(v), 1, 16);
+            saveMidiDrive(drive);
+          }, { min: 1, max: 16, width: 66 }),
+        ),
+        field(
+          'Note length',
+          numberField(drive.noteLength, (v) => {
+            drive.noteLength = clamp(v, 0.1, 30);
+            saveMidiDrive(drive);
+          }, { min: 0.1, max: 30, step: 0.1, width: 66 }),
+          el('span', { class: 'status', text: 'seconds held' }),
+        ),
+        field(
+          'Release tail',
+          numberField(drive.releaseTail, (v) => {
+            drive.releaseTail = clamp(v, 0, 30);
+            saveMidiDrive(drive);
+          }, { min: 0, max: 30, step: 0.1, width: 66 }),
+          el('span', { class: 'status', text: 'seconds to wait after note-off' }),
+        ),
+        el('div', {
+          class: 'notice',
+          text:
+            plan.velocityLayers > 1
+              ? `Layers play at velocity ${Array.from({ length: plan.velocityLayers }, (_, i) => layerVelocity(i + 1, plan.velocityLayers)).join(', ')}.`
+              : `Plays at velocity ${layerVelocity(1, 1)}. Add velocity layers to vary it.`,
+        }),
+      );
+    };
+    const driveToggle = checkbox('Play each note over MIDI (unattended)', drive.enabled, (v) => {
+      drive.enabled = v;
+      driveBody.style.display = v ? '' : 'none';
+      saveMidiDrive(drive);
+      if (v) void midi.init().then(renderDrive);
+      renderDrive();
+    });
+    driveBody.style.display = drive.enabled ? '' : 'none';
+    midi.onChange(renderDrive);
+    if (drive.enabled) void midi.init();
+    renderDrive();
+
     const body = el('div', {}, [
       el('div', { class: 'notice' }, [
         'The app prompts a note, listens, and moves on by itself when the note finishes. ',
@@ -318,6 +444,8 @@ export class SessionScreen {
         update();
       }),
       refSource,
+      driveToggle,
+      driveBody,
       summary,
     ]);
     update();
@@ -327,7 +455,7 @@ export class SessionScreen {
       title: 'Capture session',
       body,
       confirmLabel: 'Start',
-      onConfirm: () => onStart(plan),
+      onConfirm: () => onStart(plan, drive.enabled && drive.outputId ? drive : null),
     });
   }
 
@@ -337,8 +465,9 @@ export class SessionScreen {
    * whole matrix, and makes each take replace the one already in that slot —
    * that is the re-record path.
    */
-  async start(plan: CapturePlan, steps?: CaptureStep[]): Promise<boolean> {
+  async start(plan: CapturePlan, steps?: CaptureStep[], drive?: MidiDrive | null): Promise<boolean> {
     this.plan = plan;
+    this.drive = drive ?? null;
     this.steps = steps?.length ? steps : buildSteps(plan);
     this.replacing = !!steps?.length;
 
@@ -396,6 +525,7 @@ export class SessionScreen {
     }
 
     this.stepIndex = 0;
+    if (this.drive) this.hintEl.textContent = 'Playing over MIDI · Space — retake · S — skip · Esc — end session';
     await this.measureNoiseFloor();
     this.beginStep();
     return true;
@@ -431,6 +561,7 @@ export class SessionScreen {
   }
 
   private beginStep(): void {
+    this.cancelMidiNote();
     const step = this.currentStep;
     if (!step) return this.finishSession();
 
@@ -455,10 +586,79 @@ export class SessionScreen {
     // The reference comes out of the speakers, so the mic will hear it. Hold
     // off arming until it has finished or the session records its own cue.
     this.armAt = 0;
-    if (plan?.referenceTone) {
+    if (this.drive) {
+      // No reference cue here: the human it helps is not present, and the
+      // synth is about to play the real note.
+      this.scheduleMidiNote(step);
+    } else if (plan?.referenceTone) {
       const seconds = this.playReference(step.midi);
       this.armAt = performance.now() + seconds * 1000 + 150;
       this.stateEl.textContent = 'reference';
+    }
+  }
+
+  private get driveOptions(): MidiCaptureOptions {
+    const d = this.drive;
+    return {
+      noteLength: d?.noteLength ?? 0,
+      releaseTail: d?.releaseTail ?? 0,
+      silenceTimeout: this.plan?.silenceTimeout ?? 0.6,
+    };
+  }
+
+  /**
+   * Play the step's note on the synth, then release it.
+   *
+   * A short settle delay comes first so the previous note's release and the
+   * onset detector's re-arm are done before the new attack arrives.
+   */
+  private scheduleMidiNote(step: CaptureStep): void {
+    const d = this.drive;
+    if (!d || !this.plan) return;
+    this.stateEl.textContent = 'playing over MIDI';
+    this.noteOnTimer = setTimeout(() => {
+      this.noteOnTimer = null;
+      const velocity = layerVelocity(step.velLayer, this.plan?.velocityLayers ?? 1);
+      if (!midi.sendNoteOn(d.outputId, d.channel, step.midi, velocity)) {
+        toast('MIDI output not available', 'err');
+        this.stop();
+        return;
+      }
+      this.soundingNote = step.midi;
+      this.noteOnAt = performance.now();
+      this.noteOffTimer = setTimeout(() => this.releaseMidiNote(), d.noteLength * 1000);
+      // Polled rather than driven by audio blocks: a silent or mis-routed synth
+      // produces no blocks that cross the gate, and nothing else would notice.
+      this.watchTimer = setInterval(() => this.watchMidiTake(), 100);
+    }, 350);
+  }
+
+  private releaseMidiNote(): void {
+    const d = this.drive;
+    if (d && this.soundingNote != null) midi.sendNoteOff(d.outputId, d.channel, this.soundingNote);
+    this.soundingNote = null;
+  }
+
+  /** Stop timers and make sure no note is left sounding. */
+  private cancelMidiNote(): void {
+    if (this.noteOnTimer) clearTimeout(this.noteOnTimer);
+    if (this.noteOffTimer) clearTimeout(this.noteOffTimer);
+    if (this.watchTimer) clearInterval(this.watchTimer);
+    this.noteOnTimer = this.noteOffTimer = this.watchTimer = null;
+    this.noteOnAt = 0;
+    this.releaseMidiNote();
+  }
+
+  private watchMidiTake(): void {
+    if (!this.noteOnAt) return;
+    const since = (performance.now() - this.noteOnAt) / 1000;
+    if (this.phase === 'listening' && midiOnsetTimedOut(since, this.driveOptions)) {
+      this.skipped++;
+      toast(`No sound heard for ${midiName(this.currentStep?.midi ?? 0)} — skipped`, 'err');
+      this.advance();
+    } else if (this.phase === 'recording') {
+      const quiet = this.quietFrames / this.captureSampleRate;
+      if (midiTakeFinished(since, quiet, this.driveOptions)) this.finishTake();
     }
   }
 
@@ -601,7 +801,9 @@ export class SessionScreen {
     const sr = this.captureSampleRate;
     if (blockDb <= gate) {
       this.quietFrames += blocks[0].length;
-      if (this.quietFrames / sr >= plan.silenceTimeout) this.finishTake();
+      // In MIDI mode the watch timer decides: silence must not end a take
+      // while the key is still held.
+      if (!this.drive && this.quietFrames / sr >= plan.silenceTimeout) this.finishTake();
     } else {
       this.quietFrames = 0;
     }
@@ -629,6 +831,7 @@ export class SessionScreen {
 
   private finishTake(): void {
     const step = this.currentStep;
+    this.cancelMidiNote();
     const captured = this.drain();
     this.phase = 'listening';
     if (!step || !captured) return this.advance();
@@ -723,7 +926,7 @@ export class SessionScreen {
     this.noteEl.className = 'session-note';
     this.stateEl.textContent = this.replacing
       ? `${this.replaced} of ${this.steps.length} takes replaced`
-      : `${this.steps.length} takes captured`;
+      : `${this.steps.length - this.skipped} takes captured`;
     this.stateEl.className = 'session-state';
     this.subEl.textContent = '';
     this.progressBar.style.width = '100%';
@@ -732,6 +935,10 @@ export class SessionScreen {
 
   stop(): void {
     document.removeEventListener('keydown', this.onKey);
+    this.cancelMidiNote();
+    // A dropped note-off would leave a synth droning after the session ends,
+    // so always finish with All Notes Off on the driven channel.
+    if (this.drive) midi.sendAllNotesOff(this.drive.outputId, this.drive.channel);
     try {
       this.stopNativeCapture?.();
       this.stopNativeCapture = null;

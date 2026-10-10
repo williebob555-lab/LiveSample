@@ -178,6 +178,8 @@ export interface ModalOptions {
   /** Runs when the cancel button is pressed (not on Esc or scrim clicks). */
   onCancel?: () => void;
   wide?: boolean;
+  /** Runs however the dialog closes (button, Esc, click outside). */
+  onClose?: () => void;
 }
 
 export function modal(opts: ModalOptions): () => void {
@@ -187,6 +189,7 @@ export function modal(opts: ModalOptions): () => void {
   const close = () => {
     scrim.remove();
     document.removeEventListener('keydown', onKey);
+    opts.onClose?.();
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close();
