@@ -1014,3 +1014,159 @@ button.update-available {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* --- Open Recent menu ----------------------------------------------------- */
+
+.menu-wrap {
+  position: relative;
+}
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: var(--sp-1);
+}
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px var(--sp-2);
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+.menu-item:hover {
+  background: var(--s4);
+}
+.menu-name {
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+.menu-path,
+.menu-empty {
+  color: var(--text-faint);
+  font-size: var(--fs-small);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-empty {
+  padding: 6px var(--sp-2);
+}
+
+/* --- Welcome ---------------------------------------------------------------- */
+
+.welcome {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+}
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  width: min(560px, 100%);
+  padding: var(--sp-6);
+  background: var(--s2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+.welcome-card h2 {
+  font-size: var(--fs-display);
+  font-weight: 500;
+  color: var(--text);
+}
+.welcome-card p {
+  color: var(--text-dim);
+  font-size: var(--fs-mid);
+  line-height: 1.6;
+  max-width: 44ch;
+}
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-top: var(--sp-2);
+}
+.welcome-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  background: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.welcome-action:hover {
+  background: var(--s4);
+}
+.welcome-action.primary {
+  border-color: var(--accent-dim);
+  background: var(--accent-wash);
+}
+.welcome-action.primary:hover {
+  border-color: var(--accent);
+}
+.welcome-action-title {
+  font-size: var(--fs-large);
+  color: var(--text);
+}
+.welcome-action.primary .welcome-action-title {
+  color: var(--accent-hi);
+}
+.welcome-action-sub {
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+}
+.welcome-recents {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-2);
+}
+.welcome-recent {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 5px var(--sp-2);
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+.welcome-recent:hover {
+  background: var(--s4);
+}
+.welcome-recent-name {
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+.welcome-recent-path,
+.welcome-none {
+  color: var(--text-faint);
+  font-size: var(--fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}

@@ -5,7 +5,7 @@ import '@fontsource/inter/700.css';
 import './styles/tokens.css';
 import './styles/app.css';
 
-import { app, toast } from './ui/app';
+import { app, toast, modal } from './ui/app';
 import { el } from './ui/dom';
 import { Studio } from './ui/studio';
 import { SessionScreen } from './ui/session';
@@ -14,6 +14,8 @@ import { openAudioSettings } from './ui/audio-settings';
 import type { Stage } from './ui/app';
 import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
+import { recentProjects } from './core/project';
+import { writeRecovery, findRecovery, loadRecovery, clearRecovery } from './core/recovery';
 import { checkForUpdates, checkForUpdatesQuietly, onUpdateAvailable } from './ui/updates';
 
 const host = document.getElementById('app');
@@ -85,6 +87,88 @@ onUpdateAvailable((version) => {
   updateButton.classList.add('update-available');
 });
 
+// --- Undo / redo -----------------------------------------------------------
+
+const undoBtn = el('button', {
+  class: 'sm ghost',
+  text: 'Undo',
+  title: 'Undo (Ctrl+Z)',
+  onclick: () => doUndo(),
+});
+const redoBtn = el('button', {
+  class: 'sm ghost',
+  text: 'Redo',
+  title: 'Redo (Ctrl+Shift+Z)',
+  onclick: () => doRedo(),
+});
+
+// The capture session holds live references into the instrument (the take it
+// is about to file, the plan it is running), so swapping the document under it
+// would corrupt the session. History is simply off until it ends.
+function doUndo(): void {
+  if (!session) app.undo();
+}
+function doRedo(): void {
+  if (!session) app.redo();
+}
+
+function syncHistoryButtons(): void {
+  undoBtn.disabled = !!session || !app.canUndo;
+  redoBtn.disabled = !!session || !app.canRedo;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const t = e.target as HTMLElement | null;
+  // In a text field Ctrl+Z belongs to the field's own undo.
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) doUndo();
+  else if ((k === 'z' && e.shiftKey) || k === 'y') doRedo();
+  else return;
+  e.preventDefault();
+});
+
+// --- Open Recent -----------------------------------------------------------
+
+const recentBtn = el('button', { class: 'sm ghost', text: 'Recent ▾', title: 'Open a recent project' });
+const recentMenu = el('div', { class: 'menu', style: 'display:none' });
+const recentWrap = el('div', { class: 'menu-wrap' }, [recentBtn, recentMenu]);
+
+function closeRecent(): void {
+  recentMenu.style.display = 'none';
+}
+
+recentBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (recentMenu.style.display !== 'none') return closeRecent();
+  // Rebuilt on every open: another window or a save may have changed the list.
+  recentMenu.replaceChildren();
+  const list = recentProjects().slice(0, 12);
+  if (!list.length) recentMenu.append(el('div', { class: 'menu-empty', text: 'No recent projects' }));
+  for (const r of list) {
+    recentMenu.append(
+      el(
+        'button',
+        {
+          class: 'menu-item',
+          title: r.path,
+          onclick: () => {
+            closeRecent();
+            void studio.openPath(r.path);
+          },
+        },
+        [el('span', { class: 'menu-name', text: r.name }), el('span', { class: 'menu-path', text: r.path })],
+      ),
+    );
+  }
+  recentMenu.style.display = 'block';
+});
+document.addEventListener('click', closeRecent);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeRecent();
+});
+
 const topbar = el('div', { class: 'topbar' }, [
   brandMark(),
   nameInput,
@@ -97,7 +181,10 @@ const topbar = el('div', { class: 'topbar' }, [
     onclick: () => startSession(),
   }),
   el('button', { class: 'sm ghost', text: 'Audio…', onclick: () => openAudioSettings() }),
+  undoBtn,
+  redoBtn,
   el('button', { class: 'sm ghost', text: 'Open', onclick: () => void studio.open() }),
+  recentWrap,
   el('button', { class: 'sm ghost', text: 'Save', onclick: () => void studio.save() }),
   updateButton,
 ]);
@@ -117,14 +204,17 @@ async function launchSession(plan: CapturePlan, steps?: CaptureStep[]): Promise<
     session = null;
     app.stage = 'takes';
     app.touch(false);
+    syncHistoryButtons();
     toast('Session ended');
   });
   session = screen;
+  syncHistoryButtons();
   studio.root.append(screen.root);
   const ok = await screen.start(plan, steps);
   if (!ok) {
     screen.root.remove();
     session = null;
+    syncHistoryButtons();
   }
 }
 
@@ -143,7 +233,9 @@ app.requestCapture = startSession;
 // --- Boot ------------------------------------------------------------------
 
 app.onChange(syncStageRail);
+app.onChange(syncHistoryButtons);
 syncStageRail();
+syncHistoryButtons();
 studio.refresh();
 
 // Dev-only handle for poking at state from the console.
@@ -165,6 +257,9 @@ if (hasNative && native) {
   app.onDirtyChange((dirty) => host.setDirty(dirty));
   host.setDirty(app.dirty);
 
+  startAutosave(host);
+  void offerRecovery();
+
   host.onCloseRequest(async (action) => {
     if (action === 'save') {
       try {
@@ -175,5 +270,62 @@ if (hasNative && native) {
       }
     }
     host.closeReady();
+  });
+}
+
+// --- Autosave and crash recovery -------------------------------------------
+
+const AUTOSAVE_MS = 60_000;
+
+// Not a plain setInterval body: a slow disk must not stack up overlapping
+// writes into the same folder, so one write at a time and the next tick skips.
+function startAutosave(_host: unknown): void {
+  let busy = false;
+  let lastRev = -1;
+  setInterval(async () => {
+    // Mid-capture the instrument is changing under a live recording and the
+    // disk should be left free for it; the session saves its own takes.
+    if (busy || session || !app.dirty || app.rev === lastRev) return;
+    busy = true;
+    const rev = app.rev;
+    try {
+      await writeRecovery(app.instrument, app.projectPath);
+      lastRev = rev;
+    } catch {
+      // Autosave is a safety net. Failing quietly beats interrupting the work
+      // it exists to protect; the next tick tries again.
+    } finally {
+      busy = false;
+    }
+  }, AUTOSAVE_MS);
+}
+
+async function offerRecovery(): Promise<void> {
+  const marker = await findRecovery();
+  if (!marker) return;
+  const when = new Date(marker.savedAt).toLocaleString();
+  modal({
+    title: 'Recover unsaved work?',
+    body: el('p', {
+      text: `LiveSample didn't close cleanly — restore unsaved work from ${when}?${
+        marker.name ? ` (${marker.name})` : ''
+      }`,
+    }),
+    confirmLabel: 'Restore',
+    cancelLabel: 'Discard',
+    onConfirm: async () => {
+      const inst = await loadRecovery();
+      if (!inst) return void toast('The recovery copy could not be read', 'err');
+      app.setInstrument(inst);
+      app.projectPath = marker.originalPath;
+      // It is, by definition, not what is on disk. Autosave keeps it safe from
+      // here on and the close prompt will ask about it.
+      app.dirty = true;
+      app.touch(false);
+      toast('Recovered unsaved work');
+    },
+    // Closing the dialog any other way (Esc, clicking out) is not a decision,
+    // so only the explicit Discard button throws the copy away.
+    onCancel: () => void clearRecovery(),
   });
 }
