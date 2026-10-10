@@ -92,6 +92,12 @@ class TapProcessor extends AudioWorkletProcessor {
 registerProcessor('tap', TapProcessor);
 `;
 
+function blockRms(block: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < block.length; i++) sum += block[i] * block[i];
+  return Math.sqrt(sum / (block.length || 1));
+}
+
 type Phase = 'idle' | 'arming' | 'listening' | 'recording' | 'done';
 
 export class SessionScreen {
@@ -767,7 +773,11 @@ export class SessionScreen {
 
     const plan = this.plan;
     if (!plan) return;
-    const blockDb = gainToDb(peak);
+    // The gate is "this many dB over the room's RMS", so compare block RMS
+    // with it. Comparing a block's *peak* against an RMS floor false-triggers
+    // on ordinary Gaussian room noise (its peaks run ~10-12 dB over its RMS):
+    // takes started on hiss and never saw the silence that ends them.
+    const blockDb = gainToDb(blockRms(blocks[0]));
     const gate = this.noiseFloorDb + plan.onsetThresholdDb;
 
     if (this.phase === 'listening') {
@@ -900,7 +910,10 @@ export class SessionScreen {
   private restartStep(): void {
     // Drop the take just recorded for this step, if there was one.
     const step = this.currentStep ?? this.steps[this.stepIndex - 1];
-    if (step) {
+    // A retake session overwrites the existing take in place when the new one
+    // lands; until then that take is the only copy and zones point at it, so
+    // restarting the listen must leave it alone.
+    if (step && !this.replacing) {
       const inst = app.instrument;
       const idx = [...inst.samples]
         .reverse()

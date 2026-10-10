@@ -16,6 +16,8 @@ import type { Stage } from './ui/app';
 import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
 import { markSvg } from './ui/brand';
+import { autoMap } from './core/automap';
+import { sampleStore } from './audio/store';
 import { recentProjects } from './core/project';
 import { writeRecovery, findRecovery, loadRecovery, clearRecovery } from './core/recovery';
 import { checkForUpdates, checkForUpdatesQuietly, onUpdateAvailable } from './ui/updates';
@@ -244,6 +246,20 @@ syncStageRail();
 syncHistoryButtons();
 studio.refresh();
 
+// Test-only handle, present only when the preload set the SAMPLER_TEST_CAPTURE
+// flag (scripts/test-capture.cjs). Gives the end-to-end test the same entry
+// points the UI buttons use, minus the native dialogs.
+if ((window as unknown as { samplerTest?: { capture?: boolean } }).samplerTest?.capture) {
+  (window as unknown as Record<string, unknown>).__sampler = {
+    app,
+    studio,
+    audio,
+    startSession,
+    autoMap,
+    sampleStore,
+  };
+}
+
 // Dev-only handle for poking at state from the console.
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).sampler = { app, studio, audio };
@@ -256,6 +272,11 @@ if (import.meta.env.DEV) {
 // The unsaved check has to live in the main process, which owns the window and
 // can show a real dialog. All the renderer does is keep main informed and do
 // what it is told.
+// Declared before first use: startAutosave() runs below at boot, and a const
+// that is still in its temporal dead zone throws and aborts the rest of boot
+// (recovery prompt, close-to-save handler).
+const AUTOSAVE_MS = 60_000;
+
 if (hasNative && native) {
   const host = native;
   // After the window has settled, so a slow network never delays startup.
@@ -281,7 +302,6 @@ if (hasNative && native) {
 
 // --- Autosave and crash recovery -------------------------------------------
 
-const AUTOSAVE_MS = 60_000;
 
 // Not a plain setInterval body: a slow disk must not stack up overlapping
 // writes into the same folder, so one write at a time and the next tick skips.
