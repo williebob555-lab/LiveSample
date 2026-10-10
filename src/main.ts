@@ -18,7 +18,6 @@ import type { CapturePlan, CaptureStep, Sample } from './core/types';
 import { native, hasNative } from './core/native';
 import { markSvg } from './ui/brand';
 import { autoMap } from './core/automap';
-import { sampleStore } from './audio/store';
 import { recentProjects } from './core/project';
 import { writeRecovery, findRecovery, loadRecovery, clearRecovery } from './core/recovery';
 import { checkForUpdates, checkForUpdatesQuietly, onUpdateAvailable } from './ui/updates';

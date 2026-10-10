@@ -498,5 +498,7 @@ Untested against real hardware: the microphone driver path itself (Web Audio
 `getUserMedia` and the RtAudio capture stream, so real gain, latency and room
 noise); the Linux native path on a live PipeWire session (enumeration and the
 fallback reporting are verified; no stream has been opened on real Linux audio
-hardware yet — `npm run test:audio` on a Fedora desktop is the check); and the
+hardware yet — `npm run test:audio` on a Fedora desktop is the check); MIDI
+with real devices (message parsing and the unattended-capture timing are unit
+tested; Web MIDI access, hot-plug and a synth-driven session are not); and the
 native open/save dialogs.
