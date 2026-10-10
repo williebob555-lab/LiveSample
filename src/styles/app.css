@@ -1,0 +1,987 @@
+/* ==========================================================================
+   Shell and component library.
+
+   The primitives here were written before any screen was built, so screens are
+   composed rather than styled. That ordering is the point: styling as you go is
+   what makes every new panel a fresh negotiation with the CSS.
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--s0);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.45;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--s0);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--s4);
+  border-radius: 5px;
+  border: 2px solid var(--s0);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--s5);
+}
+
+/* --- Shell -------------------------------------------------------------- */
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 40px;
+  padding: 0 var(--sp-3);
+  background: var(--s2);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.topbar .brand {
+  font-size: var(--fs-mid);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  margin-right: var(--sp-2);
+}
+
+.topbar .inst-name {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-mid);
+  padding: 3px var(--sp-2);
+  border-radius: var(--radius);
+  min-width: 180px;
+}
+.topbar .inst-name:hover {
+  border-color: var(--line-strong);
+}
+.topbar .inst-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--s1);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* --- Stage rail --------------------------------------------------------- */
+
+.stages {
+  display: flex;
+  gap: 2px;
+  background: var(--s1);
+  padding: 2px;
+  border-radius: var(--radius);
+}
+
+.stage {
+  padding: 4px 12px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: var(--fs-base);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+  white-space: nowrap;
+}
+.stage:hover {
+  color: var(--text);
+  background: var(--s3);
+}
+.stage.active {
+  background: var(--s4);
+  color: var(--text);
+}
+.stage .step-no {
+  color: var(--text-faint);
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.stage.active .step-no {
+  color: var(--accent);
+}
+
+/* --- Workspace ---------------------------------------------------------- */
+
+.workspace {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--s1);
+  min-height: 0;
+  min-width: 0;
+}
+
+.panel + .panel {
+  border-left: 1px solid var(--line);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 28px;
+  padding: 0 var(--sp-3);
+  background: var(--s2);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.panel-title {
+  font-size: var(--fs-small);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.panel-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.panel-body.pad {
+  padding: var(--sp-3);
+}
+
+.col-left {
+  width: 260px;
+  flex: 0 0 auto;
+}
+.col-right {
+  width: 300px;
+  flex: 0 0 auto;
+}
+.col-center {
+  flex: 1 1 auto;
+}
+
+/* --- Buttons ------------------------------------------------------------ */
+
+button,
+.btn {
+  height: var(--h-control);
+  padding: 0 var(--sp-3);
+  background: var(--s3);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+button:hover,
+.btn:hover {
+  background: var(--s4);
+}
+button:active,
+.btn:active {
+  background: var(--s5);
+}
+button:disabled,
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 500;
+}
+button.primary:hover {
+  background: var(--accent-hi);
+}
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+button.ghost:hover {
+  background: var(--s3);
+  color: var(--text);
+}
+
+button.sm {
+  height: 20px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-small);
+}
+
+button.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --- Fields ------------------------------------------------------------- */
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--h-row);
+  margin-bottom: 2px;
+}
+
+.field > label {
+  flex: 0 0 96px;
+  color: var(--text-dim);
+  font-size: var(--fs-base);
+}
+
+.field > .control {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+input[type='text'],
+input[type='number'],
+select,
+textarea {
+  height: var(--h-control);
+  width: 100%;
+  background: var(--s0);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0 var(--sp-2);
+  font-family: inherit;
+  font-size: var(--fs-base);
+}
+textarea {
+  height: auto;
+  padding: var(--sp-2);
+  resize: vertical;
+  line-height: 1.5;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+input[type='number'] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 11px, calc(100% - 8px) 11px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 24px;
+}
+
+/* Custom checkbox — the native control is the fastest way to look amateur. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+.check input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--s0);
+  cursor: pointer;
+  position: relative;
+  flex: 0 0 auto;
+}
+.check input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check input:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--text-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* --- Segmented control -------------------------------------------------- */
+
+.segmented {
+  display: inline-flex;
+  background: var(--s0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: var(--h-control);
+}
+.segmented button {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 0 10px;
+  font-size: var(--fs-small);
+}
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+.segmented button:hover {
+  background: var(--s3);
+  color: var(--text);
+}
+.segmented button.on {
+  background: var(--s4);
+  color: var(--accent);
+}
+
+/* --- Knob --------------------------------------------------------------- */
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 56px;
+  cursor: ns-resize;
+  flex: 0 0 auto;
+}
+.knob canvas {
+  display: block;
+}
+.knob .knob-label {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.knob .knob-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+.knob-row {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) 0;
+}
+
+/* --- Slider ------------------------------------------------------------- */
+
+.slider {
+  position: relative;
+  height: 18px;
+  flex: 1 1 auto;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  min-width: 60px;
+}
+.slider .track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--s0);
+  border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.slider .fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  background: var(--accent-dim);
+  border-radius: 2px;
+}
+.slider .thumb {
+  position: absolute;
+  width: 3px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 1px;
+  transform: translateX(-1px);
+}
+.slider-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  min-width: 52px;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+/* --- Note controls ------------------------------------------------------ */
+
+.note-field {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.note-range {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.nr-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.nr-value {
+  font-size: var(--fs-mid);
+  color: var(--accent);
+  min-width: 34px;
+}
+.nr-head .nr-value:last-child {
+  text-align: right;
+  margin-left: auto;
+}
+
+.nr-span {
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.nr-canvas {
+  display: block;
+  width: 100%;
+  height: 34px;
+  cursor: ew-resize;
+}
+
+/* --- Meter -------------------------------------------------------------- */
+
+.meter {
+  display: block;
+  background: var(--s0);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+/* --- Lists -------------------------------------------------------------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--h-row);
+  padding: 0 var(--sp-3);
+  cursor: pointer;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  font-size: var(--fs-base);
+}
+.row:hover {
+  background: var(--s2);
+  color: var(--text);
+}
+.row.selected {
+  background: var(--accent-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.row .row-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row .row-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+.row.warn .row-meta {
+  color: var(--warn);
+}
+
+.empty {
+  padding: var(--sp-5) var(--sp-4);
+  color: var(--text-faint);
+  text-align: center;
+  font-size: var(--fs-base);
+  line-height: 1.7;
+}
+
+/* --- Section headings inside panels ------------------------------------- */
+
+.section {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.section:last-child {
+  border-bottom: none;
+}
+.section > h3 {
+  font-size: var(--fs-small);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  font-weight: 500;
+  margin-bottom: var(--sp-2);
+}
+
+/* --- Canvas surfaces ---------------------------------------------------- */
+
+.canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.zonemap-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.waveform-panel {
+  height: 190px;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Transport ---------------------------------------------------------- */
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 34px;
+  padding: 0 var(--sp-3);
+  background: var(--s2);
+  border-top: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.status {
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+}
+.status .num {
+  color: var(--text-dim);
+}
+
+.keyboard-strip {
+  height: 46px;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  background: var(--s1);
+}
+
+/* --- Badges ------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--s3);
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+.badge.ok {
+  background: rgba(111, 191, 115, 0.16);
+  color: var(--ok);
+}
+.badge.warn {
+  background: rgba(217, 176, 63, 0.16);
+  color: var(--warn);
+}
+.badge.danger {
+  background: rgba(217, 95, 95, 0.16);
+  color: var(--danger);
+}
+.badge.accent {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* --- Notices ------------------------------------------------------------ */
+
+.notice {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-base);
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: var(--sp-2);
+}
+.notice.warn {
+  border-color: rgba(217, 176, 63, 0.4);
+  background: rgba(217, 176, 63, 0.06);
+}
+.notice.danger {
+  border-color: rgba(217, 95, 95, 0.4);
+  background: rgba(217, 95, 95, 0.06);
+}
+.notice strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* --- Session mode -------------------------------------------------------
+   A different screen for a different distance: you are at the instrument,
+   several feet away, hands full. Everything here is oversized and glanceable,
+   and nothing requires the mouse.
+   ----------------------------------------------------------------------- */
+
+.session {
+  position: absolute;
+  inset: 0;
+  background: var(--s0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-5);
+  z-index: 50;
+}
+
+.session .session-note {
+  font-size: 148px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.session .session-note.armed {
+  color: var(--accent);
+}
+
+.session .session-sub {
+  font-size: var(--fs-display);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.session .session-state {
+  font-size: var(--fs-large);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+}
+.session .session-state.recording {
+  color: var(--danger);
+}
+.session .session-state.listening {
+  color: var(--accent);
+}
+
+.session .session-meter {
+  width: 420px;
+  height: 10px;
+}
+
+.session .session-progress {
+  width: 420px;
+  height: 3px;
+  background: var(--s2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.session .session-progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--dur) var(--ease);
+}
+
+.session .session-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+.session .session-hint {
+  position: absolute;
+  bottom: var(--sp-5);
+  color: var(--text-faint);
+  font-size: var(--fs-base);
+}
+
+/* --- Modal -------------------------------------------------------------- */
+
+.modal-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--s1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  width: 520px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-mid);
+  font-weight: 500;
+}
+.modal-body {
+  padding: var(--sp-4);
+  overflow: auto;
+}
+.modal-foot {
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* --- Toast -------------------------------------------------------------- */
+
+.toasts {
+  position: absolute;
+  bottom: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  z-index: 200;
+  pointer-events: none;
+}
+.toast {
+  background: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.toast.err {
+  border-color: rgba(217, 95, 95, 0.5);
+  color: var(--danger);
+}
+
+.shell {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- Stage bodies -------------------------------------------------------
+   Map and Refine used to render identical centres, which made Refine look
+   inert. Each now owns its own layout.
+   ----------------------------------------------------------------------- */
+
+.panel-sub {
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+  margin-left: var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.empty-cta {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  text-align: center;
+}
+.empty-cta h2 {
+  font-size: var(--fs-large);
+  font-weight: 500;
+  color: var(--text);
+}
+.empty-cta p {
+  font-size: var(--fs-base);
+  color: var(--text-dim);
+  line-height: 1.7;
+  max-width: 46ch;
+}
+
+/* --- Coverage ----------------------------------------------------------- */
+
+.coverage-wrap {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  background: var(--s1);
+  padding: var(--sp-2) 0 4px;
+}
+.coverage-label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  padding: 0 var(--sp-3) 3px;
+}
+.coverage-strip canvas {
+  display: block;
+  width: 100%;
+  height: 14px;
+  cursor: crosshair;
+}
+.coverage-readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  padding: 4px var(--sp-3) 0;
+  min-height: 16px;
+}
+
+/* --- Refine ------------------------------------------------------------- */
+
+.refine-body {
+  gap: 0;
+}
+.refine-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+}
+.refine-panel:first-child {
+  border-top: none;
+}
+.refine-panel.grow {
+  flex: 1 1 auto;
+  min-height: 150px;
+}
+.envelope-view canvas,
+.filter-view canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.loop-list {
+  overflow: auto;
+}
+.loop-list .row {
+  cursor: pointer;
+}
+
+.stage-blurb {
+  flex: 0 0 auto;
+  padding: 5px var(--sp-3) 6px;
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+  background: var(--s1);
+  border-bottom: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+.panel-title {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.panel-sub {
+  flex: 0 1 auto;
+}
