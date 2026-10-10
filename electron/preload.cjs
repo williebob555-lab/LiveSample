@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('samplerNative', {
   write: (p, data) => ipcRenderer.invoke('fs:write', p, data),
   mkdir: (p) => ipcRenderer.invoke('fs:mkdir', p),
   exists: (p) => ipcRenderer.invoke('fs:exists', p),
+  remove: (p) => ipcRenderer.invoke('fs:remove', p),
   listAudio: (dir) => ipcRenderer.invoke('fs:listAudio', dir),
   join: (...parts) => ipcRenderer.invoke('fs:join', ...parts),
   basename: (p) => ipcRenderer.invoke('fs:basename', p),

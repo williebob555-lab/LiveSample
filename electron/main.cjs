@@ -5,6 +5,7 @@
 const { app, BrowserWindow, ipcMain, dialog, utilityProcess } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 
 const DEV_URL = process.env.SAMPLER_DEV_URL || '';
 
@@ -27,6 +28,17 @@ let win = null;
 // becomes unquittable.
 let isDirty = false;
 let forceClose = false;
+let discardRecovery = false;
+
+// Crash recovery lives here, in userData/recovery (see src/core/recovery.ts).
+// Anything that removes it must stay inside this folder: the renderer asks for
+// deletions by path, and a bug there must not be able to rm -rf elsewhere.
+const recoveryRoot = () => path.join(app.getPath('userData'), 'recovery');
+function insideRecovery(p) {
+  const root = path.resolve(recoveryRoot());
+  const target = path.resolve(String(p));
+  return target === root || target.startsWith(root + path.sep);
+}
 
 function confirmClose(e) {
   if (forceClose || !isDirty) return;
@@ -45,6 +57,7 @@ function confirmClose(e) {
 
   if (choice === 2) return;
   if (choice === 1) {
+    discardRecovery = true;
     forceClose = true;
     win.close();
     return;
@@ -79,6 +92,19 @@ function createWindow() {
   });
   win.once('ready-to-show', () => win.show());
   win.on('close', confirmClose);
+  // Any orderly exit clears the recovery copy, so the next launch only offers
+  // one after a crash. "Don't save" always discards. A close with the document
+  // still dirty (failed save, wedged-save timeout) keeps it: that work is not
+  // anywhere else.
+  win.on('closed', () => {
+    if (discardRecovery || !isDirty) {
+      try {
+        fsSync.rmSync(recoveryRoot(), { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+  });
   if (DEV_URL) win.loadURL(DEV_URL);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
@@ -254,6 +280,12 @@ ipcMain.handle('fs:exists', async (_e, p) => {
   } catch {
     return false;
   }
+});
+
+ipcMain.handle('fs:remove', async (_e, p) => {
+  if (!insideRecovery(p)) throw new Error('remove is restricted to the recovery folder');
+  await fs.rm(p, { recursive: true, force: true });
+  return true;
 });
 
 ipcMain.handle('fs:listAudio', async (_e, dir) => listAudioFiles(dir));

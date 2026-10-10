@@ -20,6 +20,8 @@ export interface SamplerNative {
   write(path: string, data: Uint8Array): Promise<boolean>;
   mkdir(path: string): Promise<boolean>;
   exists(path: string): Promise<boolean>;
+  /** Recursive delete; the host refuses anything outside userData/recovery. */
+  remove(path: string): Promise<boolean>;
   listAudio(dir: string): Promise<string[]>;
   join(...parts: string[]): Promise<string>;
   basename(path: string): Promise<string>;

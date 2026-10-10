@@ -25,6 +25,7 @@ import {
   sampleIdentity,
   stepIdentity,
 } from '../src/core/capture';
+import { History } from '../src/core/history';
 import { makeContext } from '../src/export/context';
 import { exportSfz } from '../src/export/sfz';
 import { exportDecentSampler } from '../src/export/decentsampler';
@@ -460,6 +461,59 @@ group('Mono mixdown');
   const r = new Float32Array([-1, 0, 1]);
   const m = toMono([l, r]);
   check('averages channels', m[0] === 0 && m[1] === 0.5 && m[2] === 1, Array.from(m).join(','));
+}
+
+group('Undo history');
+{
+  let clock = 0;
+  const mk = () => new History<{ v: number }>({ v: 0 }, (x) => ({ ...x }), 3, 500, () => clock);
+  const live = { v: 0 };
+  const edit = (h: History<{ v: number }>, v: number, at: number) => {
+    clock = at;
+    live.v = v;
+    h.commit(live);
+  };
+
+  let h = mk();
+  check('nothing to undo at start', !h.canUndo && !h.canRedo && h.undo() === null && h.redo() === null);
+
+  edit(h, 1, 1000);
+  edit(h, 2, 3000);
+  check('two separate edits are two steps', h.undo()?.v === 1 && h.undo()?.v === 0 && h.undo() === null);
+  check('redo walks forward', h.redo()?.v === 1 && h.redo()?.v === 2 && h.redo() === null);
+
+  h = mk();
+  edit(h, 1, 1000);
+  edit(h, 2, 1100);
+  edit(h, 3, 1400);
+  check('rapid edits coalesce into one step', h.undo()?.v === 0 && !h.canUndo);
+  check('redo of a coalesced step restores its final state', h.redo()?.v === 3);
+
+  h = mk();
+  edit(h, 1, 1000);
+  edit(h, 2, 3000);
+  h.undo();
+  check('a new edit clears redo', (edit(h, 9, 3100), !h.canRedo));
+  clock = 3200;
+  check('edit right after undo is its own step', h.undo()?.v === 1);
+
+  h = mk();
+  for (let i = 1; i <= 6; i++) edit(h, i, i * 10_000);
+  let n = 0;
+  while (h.undo()) n++;
+  check('history is capped', n === 3, String(n));
+
+  h = mk();
+  edit(h, 1, 1000);
+  h.reset({ v: 7 });
+  check('reset clears both stacks', !h.canUndo && !h.canRedo);
+  const snap = h.undo();
+  check('snapshots are copies', snap === null);
+  h = mk();
+  edit(h, 1, 1000);
+  const back = h.undo()!;
+  back.v = 99;
+  check('mutating a restored state does not corrupt history', h.redo()?.v === 1);
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

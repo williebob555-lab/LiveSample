@@ -39,7 +39,8 @@ import {
   splitLongTake,
 } from '../core/pipeline';
 import { native, hasNative, baseName, pickFilesInBrowser, downloadInBrowser } from '../core/native';
-import { saveProject, loadProject, rememberProject } from '../core/project';
+import { saveProject, loadProject, rememberProject, forgetProject, recentProjects } from '../core/project';
+import { clearRecovery } from '../core/recovery';
 import { TARGETS, exportWarnings, buildBundle, type AudioSource } from '../export';
 
 export class Studio {
@@ -339,7 +340,11 @@ export class Studio {
       el('div', { class: 'stage-blurb', text: this.stageBlurb() }),
     );
 
-    if (app.stage === 'takes') {
+    if (app.stage === 'takes' && !app.instrument.samples.length) {
+      // Nothing to show a waveform of; a first-run welcome is more useful than
+      // an empty canvas. It vanishes as soon as there is a take.
+      this.centerHost.append(this.welcomeCard());
+    } else if (app.stage === 'takes') {
       // waveform.root is already a .canvas-wrap — wrapping it again would give
       // it a block parent of auto height, collapsing the canvas to its
       // intrinsic 300x150 instead of filling the panel.
@@ -361,6 +366,77 @@ export class Studio {
       this.envelopeView.draw();
       this.filterView.draw();
     });
+  }
+
+  /** Empty-instrument welcome: the three ways to start. */
+  private welcomeCard(): HTMLElement {
+    const NS = 'http://www.w3.org/2000/svg';
+    // Same geometry as the favicon-style mark: an amber rounded square holding
+    // five waveform bars, tallest in the middle.
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    svg.setAttribute('width', '72');
+    svg.setAttribute('height', '72');
+    svg.setAttribute('aria-hidden', 'true');
+    const rect = document.createElementNS(NS, 'rect');
+    for (const [k, v] of Object.entries({ width: '64', height: '64', rx: '14', fill: 'var(--accent)' }))
+      rect.setAttribute(k, v);
+    svg.append(rect);
+    [[14, 16], [22, 28], [30, 40], [38, 28], [46, 16]].forEach(([x, h]) => {
+      const bar = document.createElementNS(NS, 'rect');
+      for (const [k, v] of Object.entries({
+        x: String(x),
+        y: String(32 - h / 2),
+        width: '4',
+        height: String(h),
+        rx: '2',
+        fill: 'var(--text-on-accent)',
+      }))
+        bar.setAttribute(k, v);
+      svg.append(bar);
+    });
+
+    const action = (title: string, sub: string, run: () => void, primary = false) =>
+      el('button', { class: `welcome-action ${primary ? 'primary' : ''}`, onclick: run }, [
+        el('span', { class: 'welcome-action-title', text: title }),
+        el('span', { class: 'welcome-action-sub', text: sub }),
+      ]);
+
+    const recents = recentProjects().slice(0, 5);
+    const recentList = el('div', { class: 'welcome-recents' });
+    if (!recents.length) {
+      recentList.append(el('div', { class: 'welcome-none', text: 'No recent projects yet' }));
+    }
+    for (const r of recents) {
+      recentList.append(
+        el('button', { class: 'welcome-recent', title: r.path, onclick: () => void this.openPath(r.path) }, [
+          el('span', { class: 'welcome-recent-name', text: r.name }),
+          el('span', { class: 'welcome-recent-path', text: r.path }),
+        ]),
+      );
+    }
+
+    return el('div', { class: 'welcome' }, [
+      el('div', { class: 'welcome-card' }, [
+        svg,
+        el('h2', { text: 'Welcome to LiveSample' }),
+        el('p', { text: 'Build a multisampled instrument: bring in recordings or play the notes yourself.' }),
+        el('div', { class: 'welcome-actions' }, [
+          action('Import samples', 'Audio files or a long take', () => void this.importFiles()),
+          action(
+            'Start a capture session',
+            'Record each note as you play',
+            () => (app.requestCapture ? app.requestCapture() : toast('Capture is not available here', 'err')),
+            true,
+          ),
+          action('Open recent', recents.length ? 'Pick up where you left off' : 'Open a .sinst folder', () => {
+            if (!recents.length) void this.open();
+            else recentList.scrollIntoView({ block: 'nearest' });
+          }),
+        ]),
+        recentList,
+      ]),
+    ]);
   }
 
   /** Map: the zone grid, a coverage band, and the selected sample. */
@@ -670,7 +746,7 @@ export class Studio {
               app.instrument.samples = app.instrument.samples.filter((x) => x.id !== s.id);
               for (const g of app.instrument.groups)
                 g.zones = g.zones.filter((z) => z.sampleId !== s.id);
-              sampleStore.delete(s.id);
+              // Audio stays in the store so undo can bring the take back whole.
               app.selectedSamples = [];
               app.touch();
             },
@@ -1051,7 +1127,7 @@ export class Studio {
           placeholder: 'Description',
           oninput: (e: Event) => {
             inst.description = (e.target as HTMLTextAreaElement).value;
-            app.dirty = true;
+            app.noteEdit();
           },
         }),
       ),
@@ -1311,7 +1387,7 @@ export class Studio {
 
     const inst = app.instrument;
     inst.samples = inst.samples.filter((s) => s.id !== source.id);
-    sampleStore.delete(source.id);
+    // Source audio is kept in the store so undoing the split works.
     for (const r of results) inst.samples.push(r.sample);
     analyzeAll(results.map((r) => r.sample), { useTargetHint: false });
     app.selectedSamples = [];
@@ -1480,6 +1556,7 @@ export class Studio {
     app.projectPath = target;
     app.dirty = false;
     rememberProject(target);
+    void clearRecovery();
     app.touch(false);
     toast('Saved');
   }
@@ -1490,6 +1567,8 @@ export class Studio {
     await saveProject(app.instrument, app.projectPath, (d, t) => prog.update(d, t));
     prog.close();
     app.dirty = false;
+    rememberProject(app.projectPath);
+    void clearRecovery();
     app.touch(false);
     toast('Saved');
   }
@@ -1498,6 +1577,19 @@ export class Studio {
     if (!hasNative || !native) return toast('Opening needs the desktop app', 'err');
     const dir = await native.chooseDir('Open a .sinst folder');
     if (!dir) return;
+    await this.openPath(dir);
+  }
+
+  /** Open a known project folder (Open, Open Recent, the welcome card). */
+  async openPath(dir: string): Promise<void> {
+    if (!hasNative || !native) return toast('Opening needs the desktop app', 'err');
+    // Recents outlive the folders they point at; say so and tidy the list
+    // rather than showing a generic "not a project" error.
+    if (!(await native.exists(await native.join(dir, 'instrument.json')))) {
+      forgetProject(dir);
+      app.touch(false);
+      return toast(`${baseName(dir)} no longer exists — removed from recent projects`, 'err');
+    }
     const prog = progressModal('Opening');
     const inst = await loadProject(dir, (d, t) => prog.update(d, t));
     prog.close();
@@ -1505,6 +1597,9 @@ export class Studio {
     app.setInstrument(inst);
     app.projectPath = dir;
     rememberProject(dir);
+    // Whatever was unsaved before this is gone now; a recovery copy of it
+    // would only be offered back after the next crash, confusingly.
+    void clearRecovery();
     toast(`Opened ${inst.name}`);
   }
 

@@ -189,7 +189,7 @@ export class SessionScreen {
     // real edit should. The first update() is setup, not a change.
     let edited = false;
     const update = () => {
-      if (edited) app.dirty = true;
+      if (edited) app.noteEdit();
       const notes = planNotes(plan.lowNote, plan.highNote, plan.step);
       const total = notes.length * plan.velocityLayers * plan.roundRobins;
       clear(summary);
