@@ -86,6 +86,7 @@ After the first build, `npm run electron` opens the app without rebuilding.
 | `npm run dev` | Vite dev server with hot reload. Works in a plain browser too, minus native dialogs and native audio. Point Electron at it with `SAMPLER_DEV_URL=http://localhost:5210 npm run electron`. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run selftest` | The DSP, model and exporter checks (below). No audio hardware needed. |
+| `npm run test:capture` | Builds, launches the real app under Electron (xvfb is used when there is no display) and drives a whole capture session with synthetic tones in place of a microphone: onset and silence detection, advance, pitch analysis, a retake, save to `.sinst`, reopen. No audio hardware needed. Set by `SAMPLER_TEST_CAPTURE=1`, which is inert otherwise. |
 | `npm run test:audio` | Boots the real audio host and plays a note through actual hardware. |
 | `npm run dist` | Build the installer for this OS into `release/` (NSIS on Windows, AppImage on Linux). |
 | `npm run release` | Same, and publish to GitHub Releases (CI does this on a tag). |
@@ -445,10 +446,17 @@ Not yet: MIDI input and unattended MIDI-driven capture, mic-position blending,
 articulation editing UI, native Ableton `.adg`, DecentSampler UI designer,
 denoising.
 
-Untested against real hardware: the Linux native path on a live PipeWire
-session (enumeration and the fallback reporting are verified; no stream has
-been opened on real Linux audio hardware yet — `npm run test:audio` on a Fedora
-desktop is the check); the capture session end to end, including
-re-recording (the microphone path is written and the driver layer is verified,
-but no take has been recorded through it); and `.sinst` save/load round-tripping
-through the native dialogs.
+Covered by `npm run test:capture`, with synthetic input: the capture session
+logic (onset detection, silence ending a take, auto-advance, trimming, pitch
+analysis, retake replacing a take in place and keeping its zone) and `.sinst`
+save/load round-tripping, in the real built app. The test feeds blocks through
+the facade's capture sink (the one the native host feeds), bypassing both driver
+paths, and does not use the
+native dialogs.
+
+Untested against real hardware: the microphone driver path itself (Web Audio
+`getUserMedia` and the RtAudio capture stream, so real gain, latency and room
+noise); the Linux native path on a live PipeWire session (enumeration and the
+fallback reporting are verified; no stream has been opened on real Linux audio
+hardware yet — `npm run test:audio` on a Fedora desktop is the check); and the
+native open/save dialogs.
