@@ -15,7 +15,18 @@ import { splitOnSilence, levelStats, findOnsetAndTail, toMono } from '../src/dsp
 import { findLoop } from '../src/dsp/loop';
 import { repitch } from '../src/dsp/resample';
 import { autoMap, planNotes, findGaps, maxStretch } from '../src/core/automap';
-import { createInstrument, type Sample } from '../src/core/types';
+import { createInstrument, createGroup, defaultLoop, newId, type Sample, type Zone } from '../src/core/types';
+import { denoiseChannel } from '../src/dsp/denoise';
+import { FFT, hann } from '../src/dsp/fft';
+import { RoundRobinState, selectZones, micGain } from '../src/audio/select';
+import {
+  addArticulation,
+  deleteArticulation,
+  moveArticulation,
+  moveGroupTo,
+  articulationIssues,
+} from '../src/core/articulations';
+import { exportWarnings, TARGETS } from '../src/export';
 import {
   defaultCapturePlan,
   normalizeCapturePlan,
@@ -460,6 +471,176 @@ group('Mono mixdown');
   const r = new Float32Array([-1, 0, 1]);
   const m = toMono([l, r]);
   check('averages channels', m[0] === 0 && m[1] === 0.5 && m[2] === 1, Array.from(m).join(','));
+}
+
+
+group('Denoise');
+{
+  const sr = 44100;
+  const n = sr * 2;
+  const clean = new Float32Array(n);
+  const noisy = new Float32Array(n);
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0xffffffff) * 2 - 1;
+  // Half a second of room noise alone, then a sine over the same noise.
+  for (let i = 0; i < n; i++) {
+    const sine = i >= sr / 2 ? 0.3 * Math.sin((2 * Math.PI * 1000 * i) / sr) : 0;
+    clean[i] = sine;
+    noisy[i] = sine + 0.01 * rnd();
+  }
+  const out = denoiseChannel(noisy, sr, { strengthDb: 24 });
+  check('denoise preserves length', out.length === noisy.length);
+
+  // Noise energy away from the sine: spectrum above 3 kHz of the sine region.
+  const bandEnergy = (x: Float32Array, from: number, lo: number, hi: number): number => {
+    const N = 4096;
+    const fft = new FFT(N);
+    const w = hann(N);
+    const re = new Float32Array(N);
+    const im = new Float32Array(N);
+    for (let i = 0; i < N; i++) re[i] = x[from + i] * w[i];
+    fft.transform(re, im);
+    let e = 0;
+    for (let k = Math.floor((lo / sr) * N); k < Math.floor((hi / sr) * N); k++) e += re[k] * re[k] + im[k] * im[k];
+    return e;
+  };
+  const from = sr; // well inside the sine section
+  const noiseBefore = bandEnergy(noisy, from, 3000, 15000);
+  const noiseAfter = bandEnergy(out, from, 3000, 15000);
+  const dropDb = 10 * Math.log10(noiseBefore / noiseAfter);
+  check(`denoise lowers the noise floor by >12 dB (${dropDb.toFixed(1)} dB)`, dropDb > 12, `${dropDb.toFixed(1)} dB`);
+
+  const sineBefore = bandEnergy(noisy, from, 900, 1100);
+  const sineAfter = bandEnergy(out, from, 900, 1100);
+  const sineDb = 10 * Math.log10(sineAfter / sineBefore);
+  check(`denoise keeps the sine within 1 dB (${sineDb.toFixed(2)} dB)`, Math.abs(sineDb) < 1, `${sineDb.toFixed(2)} dB`);
+
+  // Timing: the output must stay in phase with the signal (no latency shift).
+  let dot = 0, na = 0, nb = 0;
+  for (let i = sr; i < sr + 20000; i++) {
+    dot += out[i] * clean[i];
+    na += out[i] * out[i];
+    nb += clean[i] * clean[i];
+  }
+  const corr = dot / Math.sqrt(na * nb);
+  check('denoise does not shift timing', corr > 0.99, `corr ${corr.toFixed(4)}`);
+
+  const silent = denoiseChannel(new Float32Array(sr), sr, { strengthDb: 24 });
+  check('denoise of silence stays silent', silent.every((v) => Math.abs(v) < 1e-6));
+}
+
+function zoneFor(sampleId: string, micId: string | undefined, rr = 1): Zone {
+  return {
+    id: newId('zone'),
+    sampleId,
+    micId,
+    keyLow: 60,
+    keyHigh: 60,
+    rootKey: 60,
+    velLow: 1,
+    velHigh: 127,
+    rrIndex: rr,
+    tuneCents: 0,
+    gainDb: 0,
+    pan: 0,
+    startFrame: 0,
+    endFrame: 0,
+    loop: defaultLoop(),
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+  };
+}
+
+group('Mic selection and export');
+{
+  const inst = createInstrument('Mics');
+  inst.mics.push({ id: 'mic_far', name: 'Far', gainDb: -6, pan: 0.5, delayMs: 12, muted: false });
+  inst.mics.push({ id: 'mic_room', name: 'Room', gainDb: 0, pan: 0, delayMs: 0, muted: false });
+  const closeId = inst.mics[0].id;
+  const g = inst.groups[0];
+  for (const mic of [closeId, 'mic_far', 'mic_room']) {
+    for (const rr of [1, 2]) {
+      const sid = `s_${mic}_${rr}`;
+      inst.samples.push({ id: sid, name: sid, sampleRate: SR, channels: 1, frames: 1000, analysis: {}, capture: {} });
+      g.zones.push(zoneFor(sid, mic, rr));
+    }
+  }
+  const rr = new RoundRobinState();
+  const sel = selectZones(inst, rr, 60, 100, null);
+  check('one zone per mic sounds together (rr alternates, mics layer)', sel.length === 3, `${sel.length}`);
+  check('every mic is represented', new Set(sel.map((x) => x.zone.micId)).size === 3);
+  check('mic gain is applied linearly', Math.abs(micGain(inst, sel.find((x) => x.zone.micId === 'mic_far')!.zone) - Math.pow(10, -6 / 20)) < 1e-9);
+
+  const sfz = exportSfz(makeContext(inst));
+  check('SFZ writes one group per mic', (sfz.match(/<group>/g) ?? []).length === 3);
+  check('SFZ carries mic volume', /volume=-6\b/.test(sfz));
+  check('SFZ carries mic delay', sfz.includes('delay=0.012'));
+  const ds = exportDecentSampler(makeContext(inst));
+  check('DecentSampler has per-mic group volume', ds.includes('volume="-6dB"'));
+
+  inst.mics[2].muted = true; // Room
+  check('muted mic is not selected', selectZones(inst, new RoundRobinState(), 60, 100, null).every((x) => x.zone.micId !== 'mic_room'));
+  check('muted mic is not exported (SFZ)', !exportSfz(makeContext(inst)).includes('mic_room') && (exportSfz(makeContext(inst)).match(/<group>/g) ?? []).length === 2);
+  check('muted mic is not exported (DecentSampler)', !exportDecentSampler(makeContext(inst)).includes('Room'));
+
+  const wav = TARGETS.find((t) => t.id === 'wav')!;
+  const sfzT = TARGETS.find((t) => t.id === 'sfz')!;
+  const ds2 = TARGETS.find((t) => t.id === 'decentsampler')!;
+  check('WAV target warns mic levels are ignored', exportWarnings(wav, inst).some((w) => w.includes('Mic levels')));
+  check('SFZ target does not warn about mics', exportWarnings(sfzT, inst).length === 0, exportWarnings(sfzT, inst).join('|'));
+  check('DecentSampler warns about mic delay', exportWarnings(ds2, inst).some((w) => w.includes('delay')));
+}
+
+group('Articulations');
+{
+  const inst = createInstrument('Artic');
+  const sustain = inst.articulations[0];
+  sustain.select = { mode: 'keyswitch', key: 24 };
+  const stac = addArticulation(inst, 'Staccato');
+  check('new articulation gets a free keyswitch', stac.select.mode === 'keyswitch' && stac.select.key === 25);
+  const pizz = addArticulation(inst, 'Pizz');
+  pizz.select = { mode: 'cc', cc: 1, low: 64, high: 127 };
+  const stGroup = createGroup(stac.id, 'Staccato');
+  const pzGroup = createGroup(pizz.id, 'Pizz');
+  inst.groups.push(stGroup, pzGroup);
+  for (const [i, gr] of inst.groups.entries()) {
+    const sid = 'sa' + i;
+    inst.samples.push({ id: sid, name: sid, sampleRate: SR, channels: 1, frames: 1000, analysis: {}, capture: {} });
+    gr.zones.push(zoneFor(sid, undefined));
+  }
+
+  const sfz = exportSfz(makeContext(inst));
+  check('SFZ keyswitch groups use sw_last', sfz.includes('sw_last=24') && sfz.includes('sw_last=25'));
+  check('SFZ keyswitch range spans both keys', sfz.includes('sw_lokey=24') && sfz.includes('sw_hikey=25'));
+  check('SFZ sets sw_default to the default articulation', sfz.includes('sw_default=24'));
+  check('SFZ writes CC window for CC articulation', sfz.includes('locc1=64') && sfz.includes('hicc1=127'));
+  check('SFZ labels articulations', sfz.includes('sw_label=Staccato'));
+
+  const ds = exportDecentSampler(makeContext(inst));
+  check('DecentSampler groups have at most one tags attribute', ds.split('\n').every((l) => (l.match(/ tags=/g) ?? []).length <= 1));
+  check('DecentSampler tags keyswitch articulations', ds.includes(`art_${stac.id}`));
+  check('DecentSampler binds each keyswitch key', ds.includes('<note note="24">') && ds.includes('<note note="25">'));
+  check('DecentSampler warns about CC articulations', exportWarnings(TARGETS.find((t) => t.id === 'decentsampler')!, inst).some((w) => w.includes('CC')));
+
+  // Choke + keyswitch on one group must still yield a single, valid tags attribute.
+  stGroup.chokeGroup = 2;
+  const ds2 = exportDecentSampler(makeContext(inst));
+  check('choke and keyswitch tags merge', ds2.includes(`tags="choke2,art_${stac.id}"`));
+  stGroup.chokeGroup = 0;
+
+  check('reorder moves an articulation', moveArticulation(inst, stac.id, -1) && inst.articulations[0].id === stac.id);
+  moveGroupTo(inst, stGroup.id, sustain.id);
+  check('group can move to another articulation', stGroup.articulationId === sustain.id);
+
+  const r = deleteArticulation(inst, pizz.id, sustain.id);
+  check('delete with move keeps the group', r.ok && r.groupsAffected === 1 && inst.groups.some((x) => x.id === pzGroup.id && x.articulationId === sustain.id));
+  const total = inst.groups.length;
+  const r2 = deleteArticulation(inst, stac.id, null);
+  check('delete without move removes the groups', r2.ok && inst.groups.length === total - r2.groupsAffected);
+  check('cannot delete the last articulation', !deleteArticulation(inst, sustain.id, null).ok && inst.articulations.length === 1);
+  check('no issues on a sane setup', articulationIssues(inst).length === 0);
+  inst.articulations.push({ id: 'dup', name: 'Dup', select: { mode: 'keyswitch', key: 24 } });
+  check('duplicate keyswitch is reported', articulationIssues(inst).length === 1);
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

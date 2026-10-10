@@ -18,6 +18,8 @@ import {
   normalizeVelocity,
   playbackRate,
   voiceGain,
+  micGain,
+  micOf,
 } from './select';
 
 export interface RenderSample {
@@ -144,6 +146,15 @@ export class NativeRenderer {
   setSampleRate(rate: number): void {
     this.sampleRate = rate;
     this.allNotesOff();
+  }
+
+  /** Pick the articulation that notes sound until a keyswitch changes it. */
+  setArticulation(id: string | null): void {
+    this.activeArticulation = id;
+  }
+
+  get currentArticulation(): string | null {
+    return this.activeArticulation;
   }
 
   setInstrument(inst: Instrument | null): void {
@@ -276,7 +287,7 @@ export class NativeRenderer {
     }
 
     const e = group.ampEnv;
-    const pan = Math.max(-1, Math.min(1, zone.pan + group.pan));
+    const pan = Math.max(-1, Math.min(1, zone.pan + group.pan + (micOf(inst, zone)?.pan ?? 0)));
     // Equal-power pan: a centre-panned voice must not be louder than a hard one.
     const angle = ((pan + 1) / 2) * (Math.PI / 2);
 
@@ -303,7 +314,7 @@ export class NativeRenderer {
       sample,
       pos: zone.startFrame,
       step: rate,
-      gain: voiceGain(zone, group, vNorm),
+      gain: voiceGain(zone, group, vNorm) * micGain(inst, zone),
       panL: Math.cos(angle),
       panR: Math.sin(angle),
       stopFrame:

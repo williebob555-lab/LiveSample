@@ -18,6 +18,9 @@ import { EnvelopeView, FilterView } from './curves';
 import { CoverageStrip } from './coverage';
 import { audio } from '../audio/output';
 import { openAudioSettings } from './audio-settings';
+import { openArticulations } from './articulations';
+import { openMixer } from './mixer';
+import { openDenoise } from './denoise';
 import { sampleStore } from '../audio/store';
 import { midiName } from '../dsp/pitch';
 import { STRETCH_GUIDANCE } from '../dsp/resample';
@@ -543,6 +546,7 @@ export class Studio {
       return [
         el('button', { class: 'sm ghost', text: 'Analyze', onclick: () => this.runAnalyze() }),
         el('button', { class: 'sm ghost', text: 'Clean up', onclick: () => this.runCleanup() }),
+        el('button', { class: 'sm ghost', text: 'Denoise', onclick: () => openDenoise(this.targetSamples()) }),
         el('button', { class: 'sm ghost', text: 'Split take', onclick: () => this.runSplit() }),
       ];
     }
@@ -550,6 +554,8 @@ export class Studio {
       return [
         el('button', { class: 'sm ghost', text: 'Auto-map', onclick: () => this.runAutoMap() }),
         el('button', { class: 'sm ghost', text: 'Fill gaps', onclick: () => this.runFillGaps() }),
+        el('button', { class: 'sm ghost', text: 'Articulations', onclick: () => openArticulations() }),
+        el('button', { class: 'sm ghost', text: 'Mics', onclick: () => openMixer() }),
       ];
     }
     return [];

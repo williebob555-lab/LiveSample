@@ -28,6 +28,7 @@ import {
 } from '../dsp/analyze';
 import { findLoop, applyLoopCrossfade } from '../dsp/loop';
 import { repitch, repitchFormant } from '../dsp/resample';
+import { denoise, type DenoiseOptions } from '../dsp/denoise';
 
 // ---------------------------------------------------------------------------
 // Import
@@ -161,6 +162,25 @@ export interface CleanupOptions {
   matchLevels?: boolean;
   fadeInMs?: number;
   fadeOutMs?: number;
+  /** Spectral-gate noise reduction, run on the original before trimming. */
+  denoise?: DenoiseOptions | null;
+}
+
+/**
+ * Denoise takes in place, on whatever audio they currently hold (cleaned or
+ * original). Length is preserved exactly, so zone windows, loop points and
+ * analysis offsets stay valid and nothing needs remapping. To start over from
+ * the untouched original, run Clean up with its denoise option instead — that
+ * path always reads the raw decode.
+ */
+export function denoiseSamples(samples: Sample[], opts: DenoiseOptions = {}): void {
+  for (const sample of samples) {
+    const cur = sampleStore.get(sample.id);
+    if (!cur) continue;
+    const channels = denoise(cur.channels, cur.sampleRate, opts);
+    sampleStore.setProcessed(sample.id, SampleStore.wrap(channels, cur.sampleRate));
+    sample.processed = true;
+  }
 }
 
 /**
@@ -181,7 +201,10 @@ export function cleanupSamples(samples: Sample[], opts: CleanupOptions = {}): vo
 
     const start = trim ? (sample.analysis.onsetFrame ?? 0) : 0;
     const end = trim ? (sample.analysis.tailFrame ?? raw.frames) : raw.frames;
-    const channels = sliceChannels(raw.channels, start, end);
+    // Denoise before trimming: the quiet pre-onset and tail are where the noise
+    // profile is learned from, and trimming would throw that away.
+    const source = opts.denoise ? denoise(raw.channels, raw.sampleRate, opts.denoise) : raw.channels;
+    const channels = sliceChannels(source, start, end);
     if (removeDc) removeDcOffset(channels);
 
     const mono = toMono(channels);

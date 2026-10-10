@@ -8,8 +8,9 @@
 // playable instrument in any DAW without writing a line of plugin code.
 // ============================================================================
 
-import type { Instrument, Group, Zone, Articulation } from '../core/types';
-import type { ExportContext } from './context';
+import type { Instrument, Group, Zone, Articulation, MicBus } from '../core/types';
+import { activeArticulation } from '../audio/select';
+import { micPartitions, type ExportContext } from './context';
 
 const fx = (n: number, digits = 3): string => {
   const r = Number(n.toFixed(digits));
@@ -17,7 +18,12 @@ const fx = (n: number, digits = 3): string => {
 };
 
 /** Opcodes shared by every region in a group. */
-function groupOpcodes(group: Group, artic: Articulation | undefined, inst: Instrument): string[] {
+function groupOpcodes(
+  group: Group,
+  artic: Articulation | undefined,
+  inst: Instrument,
+  mic: MicBus | null,
+): string[] {
   const ops: string[] = [];
 
   if (group.trigger === 'release') ops.push('trigger=release');
@@ -28,8 +34,14 @@ function groupOpcodes(group: Group, artic: Articulation | undefined, inst: Instr
     ops.push(`group=${group.chokeGroup}`, `off_by=${group.chokeGroup}`, 'off_mode=fast');
   }
 
-  if (group.gainDb !== 0) ops.push(`volume=${fx(group.gainDb)}`);
-  if (group.pan !== 0) ops.push(`pan=${fx(group.pan * 100)}`);
+  // The mic bus level rides on the group: SFZ has no bus concept, but a group
+  // per mic carrying volume/pan/delay reproduces the mixer exactly, and the
+  // opcodes are written once (a second `volume=` would silently override).
+  const volume = group.gainDb + (mic?.gainDb ?? 0);
+  if (volume !== 0) ops.push(`volume=${fx(volume)}`);
+  const pan = Math.max(-1, Math.min(1, group.pan + (mic?.pan ?? 0)));
+  if (pan !== 0) ops.push(`pan=${fx(pan * 100)}`);
+  if (mic && mic.delayMs > 0) ops.push(`delay=${fx(mic.delayMs / 1000, 5)}`);
 
   const e = group.ampEnv;
   ops.push(
@@ -69,6 +81,10 @@ function groupOpcodes(group: Group, artic: Articulation | undefined, inst: Instr
       const lo = Math.min(...keys);
       const hi = Math.max(...keys);
       ops.push(`sw_lokey=${lo}`, `sw_hikey=${hi}`, `sw_last=${sel.key}`, `sw_label=${artic.name}`);
+      // Without sw_default nothing plays until a keyswitch is pressed, whereas
+      // the app auditions with a default articulation already active.
+      const def = activeArticulation(inst, null);
+      if (def && def.select.mode === 'keyswitch') ops.push(`sw_default=${def.select.key}`);
     } else if (sel.mode === 'cc') {
       ops.push(`locc${sel.cc}=${sel.low}`, `hicc${sel.cc}=${sel.high}`);
     }
@@ -181,20 +197,23 @@ export function exportSfz(ctx: ExportContext): string {
   for (const group of inst.groups) {
     if (!group.zones.length) continue;
     const artic = inst.articulations.find((a) => a.id === group.articulationId);
-    lines.push(`// ---- ${group.name}${artic ? ` (${artic.name})` : ''} ----`);
-    lines.push('<group>');
-    for (const op of groupOpcodes(group, artic, inst)) lines.push(op);
-    lines.push('');
-
-    // Sorting by key then velocity then round robin keeps generated files
-    // diffable, which matters once these are in version control.
-    const sorted = [...group.zones].sort(
-      (a, b) => a.keyLow - b.keyLow || a.velLow - b.velLow || a.rrIndex - b.rrIndex,
-    );
-    for (const zone of sorted) {
-      lines.push('<region>');
-      for (const op of zoneOpcodes(zone, group, inst, ctx)) lines.push(op);
+    for (const part of micPartitions(inst, group)) {
+      const label = part.mic && inst.mics.length > 1 ? ` [${part.mic.name}]` : '';
+      lines.push(`// ---- ${group.name}${artic ? ` (${artic.name})` : ''}${label} ----`);
+      lines.push('<group>');
+      for (const op of groupOpcodes(group, artic, inst, part.mic)) lines.push(op);
       lines.push('');
+
+      // Sorting by key then velocity then round robin keeps generated files
+      // diffable, which matters once these are in version control.
+      const sorted = [...part.zones].sort(
+        (a, b) => a.keyLow - b.keyLow || a.velLow - b.velLow || a.rrIndex - b.rrIndex,
+      );
+      for (const zone of sorted) {
+        lines.push('<region>');
+        for (const op of zoneOpcodes(zone, group, inst, ctx)) lines.push(op);
+        lines.push('');
+      }
     }
   }
 

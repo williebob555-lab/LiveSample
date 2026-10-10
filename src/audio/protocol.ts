@@ -149,6 +149,7 @@ export type HostRequest =
   | { type: 'noteOn'; key: number; velocity: number }
   | { type: 'noteOff'; key: number }
   | { type: 'sustain'; down: boolean }
+  | { type: 'articulation'; id: string | null }
   | { type: 'panic' }
   | { type: 'previewSample'; id: string; startFrame: number; endFrame: number }
   | { type: 'startCapture' }
