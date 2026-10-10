@@ -11,6 +11,7 @@
     "build:host": "node scripts/build-host.mjs",
     "typecheck": "tsc --noEmit",
     "selftest": "esbuild scripts/selftest.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/selftest.mjs --log-level=error && node node_modules/.cache/selftest.mjs",
+    "test:capture": "npm run build && node scripts/test-capture.cjs",
     "test:audio": "npm run build:host && electron scripts/test-host.cjs",
     "start": "npm run build && electron .",
     "electron": "electron .",

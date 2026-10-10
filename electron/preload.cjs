@@ -53,3 +53,9 @@ contextBridge.exposeInMainWorld('samplerAudio', {
     return () => ipcRenderer.removeListener('audio:event', listener);
   },
 });
+
+// Test-only flag (scripts/test-capture.cjs): lets the renderer swap the
+// microphone for a synthetic source. Absent in a normal run.
+if (process.env.SAMPLER_TEST_CAPTURE === '1') {
+  contextBridge.exposeInMainWorld('samplerTest', { capture: true });
+}
