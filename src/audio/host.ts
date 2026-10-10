@@ -462,6 +462,9 @@ parentPort.on('message', (e: { data: HostRequest }) => {
       case 'instrument':
         renderer.setInstrument(msg.instrument as Instrument | null);
         break;
+      case 'articulation':
+        renderer.setArticulation(msg.id);
+        break;
       case 'sampleFromPath':
         send({ type: 'sampleReady', id: msg.id, ok: loadSampleFromPath(msg.id, msg.path) });
         break;

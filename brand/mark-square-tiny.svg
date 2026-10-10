@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="LiveSample">
+  <title>LiveSample mark — 16–24 px</title>
+  <!-- Optical variant for 16–24 px only. Everything grows so the S keeps two counters. -->
+  <rect width="256" height="256" rx="48" fill="#14161a"/>
+  <path d="M116 200 H166 C198 200 214 182 214 158 C214 132 192 125 164 121 C138 117 118 106 118 86 C118 66 136 54 164 54 H206" fill="none" stroke="#5fb2ff" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M46 54 V200 H116" fill="none" stroke="#e8a13d" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

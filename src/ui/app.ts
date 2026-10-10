@@ -8,6 +8,14 @@
 
 import { type Instrument, type Sample, createInstrument } from '../core/types';
 import { el, clear } from './dom';
+import { History } from '../core/history';
+import { sampleStore, type AudioSnapshot } from '../audio/store';
+import { audio } from '../audio/output';
+
+interface UndoState {
+  inst: Instrument;
+  audio: AudioSnapshot;
+}
 
 export type Stage = 'takes' | 'map' | 'refine' | 'export';
 
@@ -18,6 +26,8 @@ class AppState {
   selectedZones: string[] = [];
   activeGroupId: string | null = null;
   projectPath: string | null = null;
+  /** Bumped on every edit, so autosave can tell whether anything changed. */
+  rev = 0;
 
   /**
    * Unsaved-changes flag.
@@ -60,7 +70,76 @@ class AppState {
 
   /** Mark the document changed and redraw everything listening. */
   touch(dirty = true): void {
-    if (dirty) this.dirty = true;
+    if (dirty) {
+      this.dirty = true;
+      // Every user-level edit ends in touch(), so this is the single place the
+      // history hears about them. Audio is recorded by reference alongside the
+      // instrument (see snapshotState), so cleanup and denoise undo too.
+      this.history.commit(this.liveState());
+      this.rev++;
+    }
+    for (const fn of this.listeners) fn();
+  }
+
+  /** Dirty + undo step without a redraw, for edits typed into live fields. */
+  noteEdit(): void {
+    this.dirty = true;
+    this.history.commit(this.liveState());
+    this.rev++;
+  }
+
+  /**
+   * One undo step: the instrument (plain data, so structuredClone) plus the
+   * sample store's buffers by reference. Without the audio, undoing a Clean up
+   * or Denoise would restore its settings and keep the processed sound.
+   */
+  private liveState(): UndoState {
+    return { inst: this.instrument, audio: sampleStore.snapshot() };
+  }
+
+  readonly history = new History<UndoState>(
+    { inst: this.instrument, audio: sampleStore.snapshot() },
+    (s) => ({ inst: structuredClone(s.inst), audio: s.audio }),
+    100,
+    500,
+  );
+
+  get canUndo(): boolean {
+    return this.history.canUndo;
+  }
+  get canRedo(): boolean {
+    return this.history.canRedo;
+  }
+
+  undo(): void {
+    const prev = this.history.undo();
+    if (prev) this.restore(prev);
+  }
+
+  redo(): void {
+    const next = this.history.redo();
+    if (next) this.restore(next);
+  }
+
+  /**
+   * Swap in a historical snapshot. Always dirty: the document no longer
+   * matches what was saved even if undo walked back to the saved state, and a
+   * spurious "unsaved" is safer than a missed one. Selections are pruned to
+   * ids that still exist so the inspector never points at a ghost.
+   */
+  private restore(state: UndoState): void {
+    const inst = state.inst;
+    this.instrument = inst;
+    // Engines cache decoded audio per sample; anything whose buffer changed
+    // must be re-sent or the audition keeps playing the undone sound.
+    for (const id of sampleStore.restore(state.audio)) audio.invalidate(id);
+    const zoneIds = new Set(inst.groups.flatMap((g) => g.zones.map((z) => z.id)));
+    this.selectedZones = this.selectedZones.filter((id) => zoneIds.has(id));
+    this.selectedSamples = this.selectedSamples.filter((id) => inst.samples.some((s) => s.id === id));
+    if (!inst.groups.some((g) => g.id === this.activeGroupId))
+      this.activeGroupId = inst.groups[0]?.id ?? null;
+    this.dirty = true;
+    this.rev++;
     for (const fn of this.listeners) fn();
   }
 
@@ -75,6 +154,7 @@ class AppState {
     this.selectedZones = [];
     this.activeGroupId = inst.groups[0]?.id ?? null;
     this.dirty = false;
+    this.history.reset({ inst, audio: sampleStore.snapshot() });
     this.touch(false);
   }
 
@@ -119,7 +199,11 @@ export interface ModalOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm?: () => void | Promise<void>;
+  /** Runs when the cancel button is pressed (not on Esc or scrim clicks). */
+  onCancel?: () => void;
   wide?: boolean;
+  /** Runs however the dialog closes (button, Esc, click outside). */
+  onClose?: () => void;
 }
 
 export function modal(opts: ModalOptions): () => void {
@@ -129,13 +213,20 @@ export function modal(opts: ModalOptions): () => void {
   const close = () => {
     scrim.remove();
     document.removeEventListener('keydown', onKey);
+    opts.onClose?.();
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close();
   };
 
   const foot = el('div', { class: 'modal-foot' }, [
-    el('button', { text: opts.cancelLabel ?? 'Cancel', onclick: close }),
+    el('button', {
+      text: opts.cancelLabel ?? 'Cancel',
+      onclick: () => {
+        opts.onCancel?.();
+        close();
+      },
+    }),
     opts.onConfirm
       ? el('button', {
           class: 'primary',

@@ -1,0 +1,28 @@
+# Checks every pull request and every push to main before it can ship.
+# The capture test drives the real app under a virtual display, so it catches
+# regressions that the unit-level selftest cannot (it found a boot crash that
+# silently disabled crash recovery).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run selftest
+      - name: Capture session end to end (synthetic input)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libasound2t64 libpulse0
+          npm run test:capture

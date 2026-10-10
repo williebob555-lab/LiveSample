@@ -130,7 +130,8 @@ const RECENTS_KEY = 'sampler.recents';
 
 export function recentProjects(): RecentEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]') as RecentEntry[];
+    const list = JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]') as RecentEntry[];
+    return Array.isArray(list) ? list.filter((r) => r && typeof r.path === 'string') : [];
   } catch {
     return [];
   }
@@ -139,7 +140,22 @@ export function recentProjects(): RecentEntry[] {
 export function rememberProject(path: string): void {
   const list = recentProjects().filter((r) => r.path !== path);
   list.unshift({ path, name: baseName(path).replace(/\.sinst$/i, ''), openedAt: Date.now() });
-  localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, 12)));
+  saveRecents(list.slice(0, 12));
+}
+
+/** Drop an entry, e.g. when the folder it points at no longer exists. */
+export function forgetProject(path: string): void {
+  saveRecents(recentProjects().filter((r) => r.path !== path));
+}
+
+function saveRecents(list: RecentEntry[]): void {
+  // Storage can be blocked or full; losing the recents list is not worth an
+  // exception in the middle of a save.
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Re-wrap raw channel data after an external edit, keeping ids stable. */

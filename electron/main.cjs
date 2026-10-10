@@ -2,9 +2,10 @@
 // things a browser cannot: native dialogs and direct filesystem access for
 // .sinst instrument folders (which hold hundreds of MB of samples and must
 // never be copied through IndexedDB).
-const { app, BrowserWindow, ipcMain, dialog, utilityProcess } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, utilityProcess, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 
 const DEV_URL = process.env.SAMPLER_DEV_URL || '';
 
@@ -27,6 +28,17 @@ let win = null;
 // becomes unquittable.
 let isDirty = false;
 let forceClose = false;
+let discardRecovery = false;
+
+// Crash recovery lives here, in userData/recovery (see src/core/recovery.ts).
+// Anything that removes it must stay inside this folder: the renderer asks for
+// deletions by path, and a bug there must not be able to rm -rf elsewhere.
+const recoveryRoot = () => path.join(app.getPath('userData'), 'recovery');
+function insideRecovery(p) {
+  const root = path.resolve(recoveryRoot());
+  const target = path.resolve(String(p));
+  return target === root || target.startsWith(root + path.sep);
+}
 
 function confirmClose(e) {
   if (forceClose || !isDirty) return;
@@ -45,6 +57,7 @@ function confirmClose(e) {
 
   if (choice === 2) return;
   if (choice === 1) {
+    discardRecovery = true;
     forceClose = true;
     win.close();
     return;
@@ -68,6 +81,9 @@ function createWindow() {
     minWidth: 1040,
     minHeight: 680,
     backgroundColor: '#0e0f11',
+    // Windows takes its icon from the .exe; Linux needs it on the window, or
+    // Plasma shows a generic one for an unpackaged run.
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -79,11 +95,32 @@ function createWindow() {
   });
   win.once('ready-to-show', () => win.show());
   win.on('close', confirmClose);
+  // Any orderly exit clears the recovery copy, so the next launch only offers
+  // one after a crash. "Don't save" always discards. A close with the document
+  // still dirty (failed save, wedged-save timeout) keeps it: that work is not
+  // anywhere else.
+  win.on('closed', () => {
+    if (discardRecovery || !isDirty) {
+      try {
+        fsSync.rmSync(recoveryRoot(), { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+  });
   if (DEV_URL) win.loadURL(DEV_URL);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
 app.whenReady().then(() => {
+  // No handler existed before, which in Electron means every permission is
+  // granted. Keep that behaviour (the microphone for Web Audio capture depends
+  // on it) but spell 'midi' out, and refuse sysex, which nothing here uses.
+  const allow = (permission) => permission !== 'midiSysex';
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) =>
+    callback(allow(permission)),
+  );
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allow(permission));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -254,6 +291,12 @@ ipcMain.handle('fs:exists', async (_e, p) => {
   } catch {
     return false;
   }
+});
+
+ipcMain.handle('fs:remove', async (_e, p) => {
+  if (!insideRecovery(p)) throw new Error('remove is restricted to the recovery folder');
+  await fs.rm(p, { recursive: true, force: true });
+  return true;
 });
 
 ipcMain.handle('fs:listAudio', async (_e, dir) => listAudioFiles(dir));

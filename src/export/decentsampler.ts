@@ -6,15 +6,20 @@
 // handing an instrument to someone else.
 // ============================================================================
 
-import type { Zone, Group } from '../core/types';
-import type { ExportContext } from './context';
+import type { Zone, Group, Articulation } from '../core/types';
+import { micPartitions, type ExportContext } from './context';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const fx = (n: number, d = 4): string => String(Number(n.toFixed(d)));
 
-function sampleTag(zone: Zone, ctx: ExportContext, seqPosition: number | null): string {
+function sampleTag(
+  zone: Zone,
+  ctx: ExportContext,
+  seqPosition: number | null,
+  artic: Articulation | undefined,
+): string {
   const inst = ctx.instrument;
   const sample = inst.samples.find((s) => s.id === zone.sampleId);
   const attrs: string[] = [
@@ -22,9 +27,16 @@ function sampleTag(zone: Zone, ctx: ExportContext, seqPosition: number | null): 
     `rootNote="${zone.rootKey}"`,
     `loNote="${zone.keyLow}"`,
     `hiNote="${zone.keyHigh}"`,
-    `loVel="${zone.velLow}"`,
-    `hiVel="${zone.velHigh}"`,
   ];
+  // A velocity-selected articulation is a velocity window; DecentSampler has no
+  // other way to express it, so fold it into each sample like the SFZ exporter.
+  let loVel = zone.velLow;
+  let hiVel = zone.velHigh;
+  if (artic?.select.mode === 'velocity') {
+    loVel = Math.max(loVel, artic.select.low);
+    hiVel = Math.min(hiVel, artic.select.high);
+  }
+  attrs.push(`loVel="${loVel}"`, `hiVel="${hiVel}"`);
 
   if (zone.startFrame > 0) attrs.push(`start="${Math.round(zone.startFrame)}"`);
   if (sample && zone.endFrame > 0 && zone.endFrame < sample.frames)
@@ -76,35 +88,44 @@ export function exportDecentSampler(ctx: ExportContext): string {
     const rr = maxRr(group);
 
     // DecentSampler switches whole groups, so each round-robin slot becomes its
-    // own group rather than an attribute on the sample.
+    // own group rather than an attribute on the sample. Mics get the same
+    // treatment: one group per mic carries that mic's level, so the mixer
+    // survives as plain group volume. Muted mics are left out altogether.
     const slots = group.roundRobin !== 'off' && rr > 1 ? rr : 1;
-    for (let slot = 1; slot <= slots; slot++) {
-      const zones =
-        slots > 1 ? group.zones.filter((z) => z.rrIndex === slot) : group.zones;
-      if (!zones.length) continue;
+    for (const part of micPartitions(inst, group)) {
+      const micLabel = part.mic && inst.mics.length > 1 ? ` ${part.mic.name}` : '';
+      for (let slot = 1; slot <= slots; slot++) {
+        const zones = slots > 1 ? part.zones.filter((z) => z.rrIndex === slot) : part.zones;
+        if (!zones.length) continue;
 
-      const e = group.ampEnv;
-      const attrs: string[] = [
-        `name="${esc(group.name)}${slots > 1 ? ` ${slot}` : ''}"`,
-        `attack="${fx(e.attack)}"`,
-        `decay="${fx(e.decay)}"`,
-        `sustain="${fx(e.sustain)}"`,
-        `release="${fx(e.release)}"`,
-      ];
-      if (group.gainDb !== 0) attrs.push(`volume="${fx(group.gainDb, 2)}dB"`);
-      if (group.pan !== 0) attrs.push(`pan="${fx(group.pan * 100, 1)}"`);
-      if (slots > 1) attrs.push(`seqPosition="${slot}"`);
-      if (group.trigger === 'release') attrs.push('trigger="release"');
-      if (group.chokeGroup > 0)
-        attrs.push(`tags="choke${group.chokeGroup}"`, `silencedByTags="choke${group.chokeGroup}"`);
-      // Articulations are expressed as tags; the midi section below enables the
-      // matching tag from a keyswitch.
-      if (artic && artic.select.mode === 'keyswitch') attrs.push(`tags="art_${artic.id}"`);
+        const e = group.ampEnv;
+        const attrs: string[] = [
+          `name="${esc(group.name)}${esc(micLabel)}${slots > 1 ? ` ${slot}` : ''}"`,
+          `attack="${fx(e.attack)}"`,
+          `decay="${fx(e.decay)}"`,
+          `sustain="${fx(e.sustain)}"`,
+          `release="${fx(e.release)}"`,
+        ];
+        const volume = group.gainDb + (part.mic?.gainDb ?? 0);
+        if (volume !== 0) attrs.push(`volume="${fx(volume, 2)}dB"`);
+        const pan = Math.max(-1, Math.min(1, group.pan + (part.mic?.pan ?? 0)));
+        if (pan !== 0) attrs.push(`pan="${fx(pan * 100, 1)}"`);
+        if (slots > 1) attrs.push(`seqPosition="${slot}"`);
+        if (group.trigger === 'release') attrs.push('trigger="release"');
+        // One `tags` attribute only — a second would make the XML invalid.
+        // Articulations are tags too; the midi section below enables the
+        // matching tag from a keyswitch.
+        const tags: string[] = [];
+        if (group.chokeGroup > 0) tags.push(`choke${group.chokeGroup}`);
+        if (artic && artic.select.mode === 'keyswitch') tags.push(`art_${artic.id}`);
+        if (tags.length) attrs.push(`tags="${tags.join(',')}"`);
+        if (group.chokeGroup > 0) attrs.push(`silencedByTags="choke${group.chokeGroup}"`);
 
-      out.push(`    <group ${attrs.join(' ')}>`);
-      const sorted = [...zones].sort((a, b) => a.keyLow - b.keyLow || a.velLow - b.velLow);
-      for (const z of sorted) out.push(sampleTag(z, ctx, null));
-      out.push('    </group>');
+        out.push(`    <group ${attrs.join(' ')}>`);
+        const sorted = [...zones].sort((a, b) => a.keyLow - b.keyLow || a.velLow - b.velLow);
+        for (const z of sorted) out.push(sampleTag(z, ctx, null, artic));
+        out.push('    </group>');
+      }
     }
   }
   out.push('  </groups>');

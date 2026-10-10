@@ -42,6 +42,15 @@ const bridge: AudioBridge | undefined = (window as unknown as { samplerAudio?: A
 
 export const hasNativeAudio = !!bridge;
 
+/**
+ * Test-only: set by the preload when the app is started with
+ * SAMPLER_TEST_CAPTURE=1 (scripts/test-capture.cjs). Capture then comes from a
+ * fake source fed through `audio.testFeed` instead of a microphone or the
+ * native host. Always false in a normal run.
+ */
+const testCapture = !!(window as unknown as { samplerTest?: { capture?: boolean } }).samplerTest
+  ?.capture;
+
 /** The OS the audio host runs on. Under Electron the preload reports it; in a
  *  plain browser it is only a guess, and only used for wording. */
 export const platform: string =
@@ -264,6 +273,8 @@ class AudioOutput {
   private pushInstrument(inst: Instrument | null): void {
     if (!bridge) return;
     bridge.send({ type: 'instrument', instrument: inst });
+    // A freshly started host knows nothing of the UI's chosen articulation.
+    bridge.send({ type: 'articulation', id: this.articulationId });
     if (inst) this.syncSamples(inst);
   }
 
@@ -329,6 +340,23 @@ class AudioOutput {
     else webEngine.noteOff(key);
   }
 
+  /**
+   * The articulation used for audition, chosen from the UI rather than by
+   * playing a keyswitch. Held here so it survives backend switches and is
+   * re-sent to a freshly started native host.
+   */
+  private articulationId: string | null = null;
+
+  get auditionArticulation(): string | null {
+    return this.articulationId;
+  }
+
+  setArticulation(id: string | null): void {
+    this.articulationId = id;
+    webEngine.setArticulation(id);
+    if (this.backend === 'native') bridge?.send({ type: 'articulation', id });
+  }
+
   setSustainPedal(down: boolean): void {
     if (this.backend === 'native') bridge?.send({ type: 'sustain', down });
     else webEngine.setSustainPedal(down);
@@ -364,14 +392,22 @@ class AudioOutput {
   /** Route input frames from the native host to a sink. Returns a stopper. */
   captureTo(sink: (chunk: CaptureChunk) => void): () => void {
     this.captureSink = sink;
-    bridge?.send({ type: 'startCapture' });
+    if (!testCapture) bridge?.send({ type: 'startCapture' });
     return () => {
-      bridge?.send({ type: 'stopCapture' });
+      if (!testCapture) bridge?.send({ type: 'stopCapture' });
       this.captureSink = null;
     };
   }
 
+  /** Test seam: push a block into the capture sink exactly as the host would. */
+  testFeed(sampleRate: number, channels: Float32Array[]): boolean {
+    if (!testCapture || !this.captureSink) return false;
+    this.captureSink({ sampleRate, channels });
+    return true;
+  }
+
   get canCaptureNatively(): boolean {
+    if (testCapture) return true;
     return (
       this.backend === 'native' &&
       !!this.status?.running &&

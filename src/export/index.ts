@@ -26,6 +26,8 @@ export type Capability =
   | 'filters'
   | 'envelopes'
   | 'micBuses'
+  | 'micDelay'
+  | 'ccArticulations'
   | 'customUI';
 
 export interface ExportTarget {
@@ -58,6 +60,9 @@ export const TARGETS: ExportTarget[] = [
       'loops',
       'filters',
       'envelopes',
+      'micBuses',
+      'micDelay',
+      'ccArticulations',
     ),
     render: exportSfz,
   },
@@ -76,6 +81,7 @@ export const TARGETS: ExportTarget[] = [
       'loops',
       'loopCrossfade',
       'envelopes',
+      'micBuses',
       'customUI',
     ),
     render: exportDecentSampler,
@@ -125,10 +131,21 @@ export function exportWarnings(target: ExportTarget, inst: Instrument): string[]
   if (inst.groups.some((g) => g.filter.type !== 'off') && !has('filters'))
     warnings.push('Filter settings will be dropped.');
 
+  if (inst.articulations.some((a) => a.select.mode === 'cc') && !has('ccArticulations'))
+    warnings.push('CC-selected articulations cannot be switched; they will all sound together.');
+
   if (inst.mics.length > 1 && !has('micBuses'))
     warnings.push(
       `${inst.mics.length} mic positions will be exported as separate zones rather than a blendable bus.`,
     );
+
+  // Levels and mutes only matter where there is more than one mic to mix.
+  const mixed = inst.mics.some((m) => m.gainDb !== 0 || m.muted || m.pan !== 0);
+  if (inst.mics.length > 1 && mixed && !has('micBuses'))
+    warnings.push('Mic levels, pans and mutes will be ignored.');
+
+  if (inst.mics.some((m) => m.delayMs > 0) && !has('micDelay'))
+    warnings.push('Mic delay (time alignment) will be dropped; mics will start together.');
 
   return warnings;
 }

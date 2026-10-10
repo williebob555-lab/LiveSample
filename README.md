@@ -1,9 +1,12 @@
+![LiveSample](brand/png/banner-readme-1280x280.png)
+
 # LiveSample
 
 Build professional multisampled instruments quickly — capture, analyse, map,
 and export to SFZ, DecentSampler and Ableton.
 
-Every visual value lives in `src/styles/tokens.css`, so re-theming is one file.
+Every visual value lives in `src/styles/tokens.css`; the brand (mark, colours,
+type, and how it relates to LivePatch) is in [`brand/`](brand/README.md).
 
 ## Install
 
@@ -83,9 +86,11 @@ After the first build, `npm run electron` opens the app without rebuilding.
 | `npm run dev` | Vite dev server with hot reload. Works in a plain browser too, minus native dialogs and native audio. Point Electron at it with `SAMPLER_DEV_URL=http://localhost:5210 npm run electron`. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run selftest` | The DSP, model and exporter checks (below). No audio hardware needed. |
+| `npm run test:capture` | Builds, launches the real app under Electron (xvfb is used when there is no display) and drives a whole capture session with synthetic tones in place of a microphone: onset and silence detection, advance, pitch analysis, a retake, save to `.sinst`, reopen. No audio hardware needed. Set by `SAMPLER_TEST_CAPTURE=1`, which is inert otherwise. |
 | `npm run test:audio` | Boots the real audio host and plays a note through actual hardware. |
 | `npm run dist` | Build the installer for this OS into `release/` (NSIS on Windows, AppImage on Linux). |
 | `npm run release` | Same, and publish to GitHub Releases (CI does this on a tag). |
+| `npm run brand` | Re-render `brand/png/` and the app icons from the brand SVGs. |
 | `npm run install:desktop` | Linux, source checkout only: add a launcher entry (`-- --remove` to undo). The AppImage doesn't need it. |
 
 `selftest` exercises the parts a screenshot cannot check — pitch detection
@@ -202,6 +207,45 @@ running stream that is silently dead.
 Installed ASIO drivers that do not respond are listed separately as "installed,
 not responding" — read from `HKLM\SOFTWARE\ASIO` — so an unplugged interface is
 distinguishable from one that was never installed.
+
+## Your work is safe
+
+- **Undo / redo** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y, and the top-bar buttons)
+  covers every edit, including audio processing: each step keeps the
+  instrument plus references to the sample buffers, so undoing a Clean up,
+  Denoise or retake brings the previous sound back, not just its settings.
+  Processing never edits a buffer in place, which is what makes holding
+  references safe and free. Rapid edits within 500 ms (a drag, typing) are one
+  step; history holds 100 steps and resets on open.
+- **Autosave.** Every minute while there are unsaved changes, a recovery copy
+  goes to `<userData>/recovery/`. If LiveSample didn't close cleanly, the next
+  launch offers to restore it. A clean save, quit or "Don't save" clears it.
+- **Open Recent** in the top bar and on the welcome screen.
+
+## MIDI
+
+**MIDI…** in the bottom bar picks the input (all, or one port) and channel.
+Any MIDI keyboard plays the instrument through the same audition path as the
+on-screen keys, sustain pedal included.
+
+**Unattended capture.** In the capture dialog, *Play each note over MIDI*
+turns a session into a hands-off run for hardware synths: for each step the app
+sends the note to the chosen MIDI output, records it, sends note-off after the
+note length, waits for the release tail, and moves on. A step whose note never
+arrives (muted or mis-routed synth) is skipped and counted rather than hanging
+the run. All Notes Off is sent on stop.
+
+## Articulations, mics and denoise
+
+- **Articulations** (Map stage) — add, rename, reorder and delete; select by
+  keyswitch, CC range, velocity range or always. Audition any one. SFZ sets
+  `sw_default` so the default articulation plays before a keyswitch is pressed.
+- **Mics** (Map stage) — a level and mute per mic position. Zones from every
+  mic of the same note play together, mixed by those levels, in both engines
+  and in SFZ / DecentSampler export.
+- **Denoise** (Takes stage) — spectral gating with the noise profile learned
+  from the quietest part of the take. Length and timing are preserved exactly,
+  so zones and loops stay valid.
 
 ## The idea
 
@@ -399,15 +443,22 @@ MyPiano.sinst/
 ```
 src/
   core/      types.ts (the model) · automap · pipeline · project · native
-  dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft
+             history (undo) · recovery (autosave) · midi · articulations · capture
+  dsp/       wav (incl. smpl) · pitch (YIN) · analyze · loop · resample · fft · denoise
   export/    context (filenames) · sfz · decentsampler · index (targets, warnings)
-  audio/     store (decoded audio) · engine (audition) · output · host · render · protocol
-  ui/        primitives · zonemap · keyboard · waveform · studio · session · updates
+  audio/     store (decoded audio) · engine (audition) · output · host · render · protocol · midi
+  ui/        studio (layout, coordinator) · project-actions (open/save/import)
+             stages/ takes · map · refine · export — one module per stage
+             session · zonemap · keyboard · waveform · coverage · curves · notes
+             articulations · mixer · denoise · midi-settings · audio-settings
+             updates · brand · primitives · dom
   styles/    tokens.css · app.css
 electron/    main.cjs (incl. updater) · preload.cjs
 .github/     workflows/release.yml
 linux/       livesample.desktop.in
-scripts/     selftest.ts · test-host.cjs · build-host.mjs · install-linux.sh
+brand/       mark, wordmark, lockups, banners (SVG source) · png/ (generated)
+scripts/     selftest.ts · test-capture.cjs · test-host.cjs · make-brand.cjs
+             build-host.mjs · install-linux.sh
 ```
 
 The audition engine deliberately uses the same selection rules the exporters
@@ -423,29 +474,38 @@ makes the self-test possible and keeps the door open to reusing them elsewhere.
 - The UI is a **design system, not a theme system** — one look, fixed, with
   nothing exposed to the user. Making all ~45 visual parameters adjustable in an
   earlier project meant nothing had a designed default.
-- Bundling Inter finishes the typography. The fallback on Windows is Segoe UI,
-  which reads as a Windows utility rather than a music product; on Linux it is
-  whatever the desktop's sans is (Noto Sans on Fedora KDE).
+- Inter is bundled, so the typography is the same on every OS rather than
+  Segoe UI on Windows and Noto Sans on Fedora.
 - Numbers use tabular figures everywhere. Values that jitter horizontally as
   they change are the loudest amateur tell in audio software.
 
 ## Status
 
-Working: import (files, folders, long-take splitting), analysis, cleanup and
-level matching, auto-mapping, loop finding, gap filling by repitch, the audition
-engine, zone editing, capture sessions with reference pitches, audio device
-selection across WASAPI / ASIO / DirectSound on Windows and PulseAudio
+Working: import (files, folders, long-take splitting), analysis, cleanup,
+denoising and level matching, auto-mapping, loop finding, gap filling by
+repitch, the audition engine, zone editing, articulation editing, mic mixing,
+capture sessions with reference pitches, MIDI input and MIDI-driven unattended
+capture, undo/redo, autosave recovery, in-app updates, audio device selection across WASAPI / ASIO / DirectSound on Windows and PulseAudio
 (PipeWire) / ALSA on Linux, and SFZ / DecentSampler / WAV
 export.
 
-Not yet: MIDI input and unattended MIDI-driven capture, mic-position blending,
-articulation editing UI, native Ableton `.adg`, DecentSampler UI designer,
-denoising.
+Not yet: native Ableton `.adg` (needs one saved Sampler preset to match the
+schema against), DecentSampler UI designer, pitch bend in the audition engines,
+and mic delay in the native renderer (the web engine and SFZ honour it).
 
-Untested against real hardware: the Linux native path on a live PipeWire
-session (enumeration and the fallback reporting are verified; no stream has
-been opened on real Linux audio hardware yet — `npm run test:audio` on a Fedora
-desktop is the check); the capture session end to end, including
-re-recording (the microphone path is written and the driver layer is verified,
-but no take has been recorded through it); and `.sinst` save/load round-tripping
-through the native dialogs.
+Covered by `npm run test:capture`, with synthetic input: the capture session
+logic (onset detection, silence ending a take, auto-advance, trimming, pitch
+analysis, retake replacing a take in place and keeping its zone) and `.sinst`
+save/load round-tripping, in the real built app. The test feeds blocks through
+the facade's capture sink (the one the native host feeds), bypassing both driver
+paths, and does not use the
+native dialogs.
+
+Untested against real hardware: the microphone driver path itself (Web Audio
+`getUserMedia` and the RtAudio capture stream, so real gain, latency and room
+noise); the Linux native path on a live PipeWire session (enumeration and the
+fallback reporting are verified; no stream has been opened on real Linux audio
+hardware yet — `npm run test:audio` on a Fedora desktop is the check); MIDI
+with real devices (message parsing and the unattended-capture timing are unit
+tested; Web MIDI access, hot-plug and a synth-driven session are not); and the
+native open/save dialogs.

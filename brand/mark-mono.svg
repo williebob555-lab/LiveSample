@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="LiveSample">
+  <title>LiveSample mark — one colour</title>
+  <!-- One colour, inherits currentColor. No tile. -->
+  <g fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M62 70 V188 H120"/><path d="M120 188 H160 C186 188 202 176 202 156 C202 136 186 129 164 125 C142 121 128 112 128 94 C128 78 142 70 162 70 H196"/></g>
+</svg>
